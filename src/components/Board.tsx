@@ -19,7 +19,7 @@ export function Board({
   onOpenCell,
   onFlagCell,
   onChordCell,
-  difficulty = 'beginner',
+  difficulty: _difficulty = 'beginner',
 }: BoardProps) {
   const gameOver = status === 'won' || status === 'lost'
   const cols = board[0]?.length || 0
