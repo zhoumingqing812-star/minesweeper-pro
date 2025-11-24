@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Cell } from './Cell'
 import { cn } from '../lib/utils'
@@ -12,6 +13,40 @@ interface BoardProps {
   difficulty?: 'beginner' | 'intermediate' | 'expert'
 }
 
+const CELL_GAP = 4
+const MIN_CELL_SIZE = 20
+const MAX_CELL_SIZE = 36
+
+// 计算格子大小，根据可用宽度自适应
+function computeCellSize(columns: number, containerRef: React.RefObject<HTMLDivElement | null>): number {
+  if (columns === 0) return MAX_CELL_SIZE
+
+  // 获取容器可用宽度
+  const container = containerRef.current
+  if (!container) {
+    // 如果容器还未渲染，使用窗口宽度作为估算
+    const availableWidth = Math.min(window.innerWidth * 0.95 - 64, 960) // 减去 padding
+    const totalGap = CELL_GAP * (columns - 1)
+    const usableWidth = Math.max(availableWidth - totalGap, MIN_CELL_SIZE * columns)
+    const size = Math.floor(usableWidth / columns)
+    return Math.max(MIN_CELL_SIZE, Math.min(size, MAX_CELL_SIZE))
+  }
+
+  // 获取容器的实际可用宽度（减去 padding）
+  const containerStyle = window.getComputedStyle(container)
+  const paddingLeft = parseFloat(containerStyle.paddingLeft) || 0
+  const paddingRight = parseFloat(containerStyle.paddingRight) || 0
+  const availableWidth = container.clientWidth - paddingLeft - paddingRight
+
+  // 计算格子大小
+  const totalGap = CELL_GAP * (columns - 1)
+  const usableWidth = Math.max(availableWidth - totalGap, MIN_CELL_SIZE * columns)
+  const size = Math.floor(usableWidth / columns)
+  
+  // 限制在最小和最大范围内
+  return Math.max(MIN_CELL_SIZE, Math.min(size, MAX_CELL_SIZE))
+}
+
 export function Board({
   board,
   status,
@@ -23,14 +58,46 @@ export function Board({
   const gameOver = status === 'won' || status === 'lost'
   const cols = board[0]?.length || 0
   const rows = board.length
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [cellSizePx, setCellSizePx] = useState(MAX_CELL_SIZE)
 
-  // 统一的格子大小 - 所有模式都使用相同的方形格子（固定大小，不受响应式影响）
-  const cellSizePx = 36 // 固定36px，确保所有模式格子大小一致
-  const gapPx = 4 // 固定4px间距
+  // 初始化时计算格子大小
+  useEffect(() => {
+    const newSize = computeCellSize(cols, containerRef)
+    setCellSizePx(newSize)
+  }, [cols])
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const updateCellSize = () => {
+      const newSize = computeCellSize(cols, containerRef)
+      setCellSizePx(newSize)
+    }
+
+    const handleResize = () => {
+      updateCellSize()
+    }
+
+    window.addEventListener('resize', handleResize)
+    // 使用 ResizeObserver 监听容器大小变化（更精确）
+    const resizeObserver = new ResizeObserver(() => {
+      updateCellSize()
+    })
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      resizeObserver.disconnect()
+    }
+  }, [cols])
 
   return (
     <div className="relative">
       <motion.div
+        ref={containerRef}
         className={cn(
           "relative p-4 sm:p-5 md:p-6 lg:p-8 rounded-xl sm:rounded-2xl",
           "bg-gray-900/40 backdrop-blur-xl border border-gray-700/50",
@@ -48,13 +115,13 @@ export function Board({
         {/* 背景光晕效果 */}
         <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500/10 via-transparent to-cyan-500/10 pointer-events-none" />
 
-        {/* 棋盘网格 - 使用统一的方形格子大小 */}
+        {/* 棋盘网格 - 自适应大小 */}
         <div
           className="relative grid justify-center"
           style={{
             gridTemplateColumns: `repeat(${cols}, ${cellSizePx}px)`,
             gridTemplateRows: `repeat(${rows}, ${cellSizePx}px)`,
-            gap: `${gapPx}px`,
+            gap: `${CELL_GAP}px`,
             width: 'fit-content',
             margin: '0 auto',
           }}
