@@ -11,6 +11,7 @@ interface CellProps {
   onFlag: () => void
   onChord: () => void
   gameOver: boolean
+  size?: number // 固定大小，确保所有模式格子一致
 }
 
 // 数字颜色映射 - 增强的霓虹色系
@@ -27,7 +28,7 @@ const NUMBER_COLORS: Record<number, string> = {
 
 const LONG_PRESS_DURATION = 500
 
-export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
+export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: CellProps) {
   const { isOpen, isFlagged, isMine, neighborCount } = cell
   const longPressTimer = useRef<number | null>(null)
   const isLongPress = useRef(false)
@@ -85,17 +86,23 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
     }
   }
 
+  // 根据 size 计算字体大小
+  const fontSize = size <= 30 ? 'text-xs' : size <= 36 ? 'text-sm' : 'text-base'
+  const iconSize = size <= 30 ? 'w-4 h-4' : size <= 36 ? 'w-5 h-5' : 'w-6 h-6'
+  const roundedSize = size <= 30 ? 'rounded-md' : size <= 36 ? 'rounded-lg' : 'rounded-xl'
+
   return (
     <motion.button
       data-cell
       className={cn(
-        'relative w-full aspect-square rounded-md sm:rounded-lg md:rounded-xl',
-        'text-xs xs:text-sm sm:text-base md:text-lg font-bold',
+        'relative rounded-md',
+        fontSize,
+        'font-bold',
         'flex items-center justify-center select-none',
         'transition-all duration-200',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30',
         'touch-manipulation',
-        'min-w-[24px] min-h-[24px]',
+        roundedSize,
         isOpen
           ? [
               // 已翻开 - 精致的凹陷效果
@@ -129,6 +136,12 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        minWidth: `${size}px`,
+        minHeight: `${size}px`,
+      }}
       whileHover={!isOpen && !gameOver ? { scale: 1.02, y: -1 } : {}}
       whileTap={!isOpen && !gameOver ? { scale: 0.98, y: 0 } : {}}
       disabled={gameOver && !isOpen}
@@ -149,7 +162,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
           className="relative"
         >
           <Flag
-            className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-red-500 drop-shadow-[0_0_10px_rgba(248,113,113,0.9),0_2px_4px_rgba(0,0,0,0.5)]"
+            className={cn(iconSize, "text-red-500 drop-shadow-[0_0_10px_rgba(248,113,113,0.9),0_2px_4px_rgba(0,0,0,0.5)]")}
             fill="currentColor"
             strokeWidth={1.5}
           />
@@ -167,7 +180,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
           }}
           className="relative"
         >
-          <Bomb className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-red-500 drop-shadow-[0_0_12px_rgba(239,68,68,0.9),0_2px_4px_rgba(0,0,0,0.5)]" />
+          <Bomb className={cn(iconSize, "text-red-500 drop-shadow-[0_0_12px_rgba(239,68,68,0.9),0_2px_4px_rgba(0,0,0,0.5)]")} />
         </motion.div>
       )}
 
