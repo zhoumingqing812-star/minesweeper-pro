@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { produce } from 'immer'
 
 // 类型定义
 export interface Cell {
@@ -178,42 +179,42 @@ export function useMinesweeper(initialConfig: GameConfig = DEFAULT_CONFIG) {
       // 已打开或已插旗则不处理
       if (cell.isOpen || cell.isFlagged) return prevState
 
-      // 深拷贝棋盘
-      const newBoard = board.map(r => r.map(c => ({ ...c })))
+      // 记录是否踩到地雷
+      let hitMine = false
 
-      // 第一次点击：放置地雷
-      if (status === 'idle') {
-        placeMines(newBoard, row, col, config.mines)
-      }
+      // 使用 Immer 优化：produce 创建新的board，自动处理结构共享
+      const newBoard = produce(board, draft => {
+        // 第一次点击：放置地雷
+        if (status === 'idle') {
+          placeMines(draft as Cell[][], row, col, config.mines)
+        }
 
-      const targetCell = newBoard[row][col]
+        const targetCell = draft[row][col]
 
-      // 点到地雷，游戏结束
-      if (targetCell.isMine) {
-        targetCell.isOpen = true
-        // 显示所有地雷
-        for (const r of newBoard) {
-          for (const c of r) {
-            if (c.isMine) c.isOpen = true
+        // 点到地雷，游戏结束
+        if (targetCell.isMine) {
+          hitMine = true
+          targetCell.isOpen = true
+          // 显示所有地雷
+          for (const r of draft) {
+            for (const c of r) {
+              if (c.isMine) c.isOpen = true
+            }
           }
+          return
         }
-        return {
-          ...prevState,
-          board: newBoard,
-          status: 'lost',
-        }
-      }
 
-      // 使用 Flood Fill 打开格子
-      floodFill(newBoard, row, col)
+        // 使用 Flood Fill 打开格子
+        floodFill(draft as Cell[][], row, col)
+      })
 
       // 检查胜利
-      const won = checkWin(newBoard)
+      const won = hitMine ? false : checkWin(newBoard)
 
       return {
         ...prevState,
         board: newBoard,
-        status: won ? 'won' : 'playing',
+        status: hitMine ? 'lost' : (won ? 'won' : 'playing'),
       }
     })
   }, [])
@@ -231,16 +232,18 @@ export function useMinesweeper(initialConfig: GameConfig = DEFAULT_CONFIG) {
       // 已打开则不处理
       if (cell.isOpen) return prevState
 
-      // 深拷贝棋盘
-      const newBoard = board.map(r => r.map(c => ({ ...c })))
-      const targetCell = newBoard[row][col]
+      // 使用 Immer 优化
+      const newBoard = produce(board, draft => {
+        const targetCell = draft[row][col]
+        targetCell.isFlagged = !targetCell.isFlagged
+      })
 
-      targetCell.isFlagged = !targetCell.isFlagged
+      const flagged = newBoard[row][col].isFlagged
 
       return {
         ...prevState,
         board: newBoard,
-        flagCount: prevState.flagCount + (targetCell.isFlagged ? 1 : -1),
+        flagCount: prevState.flagCount + (flagged ? 1 : -1),
       }
     })
   }, [])
@@ -264,45 +267,40 @@ export function useMinesweeper(initialConfig: GameConfig = DEFAULT_CONFIG) {
       // 旗帜数不等于数字则不处理
       if (flaggedCount !== cell.neighborCount) return prevState
 
-      // 深拷贝棋盘
-      const newBoard = board.map(r => r.map(c => ({ ...c })))
-
       let hitMine = false
 
-      // 打开所有未插旗的相邻格子
-      for (const neighbor of neighbors) {
-        if (!neighbor.isFlagged && !neighbor.isOpen) {
-          const targetCell = newBoard[neighbor.row][neighbor.col]
-          if (targetCell.isMine) {
-            hitMine = true
-            targetCell.isOpen = true
-          } else {
-            floodFill(newBoard, neighbor.row, neighbor.col)
+      // 使用 Immer 优化
+      const newBoard = produce(board, draft => {
+        // 打开所有未插旗的相邻格子
+        for (const neighbor of neighbors) {
+          if (!neighbor.isFlagged && !neighbor.isOpen) {
+            const targetCell = draft[neighbor.row][neighbor.col]
+            if (targetCell.isMine) {
+              hitMine = true
+              targetCell.isOpen = true
+            } else {
+              floodFill(draft as Cell[][], neighbor.row, neighbor.col)
+            }
           }
         }
-      }
 
-      // 如果踩到地雷
-      if (hitMine) {
-        for (const r of newBoard) {
-          for (const c of r) {
-            if (c.isMine) c.isOpen = true
+        // 如果踩到地雷，显示所有地雷
+        if (hitMine) {
+          for (const r of draft) {
+            for (const c of r) {
+              if (c.isMine) c.isOpen = true
+            }
           }
         }
-        return {
-          ...prevState,
-          board: newBoard,
-          status: 'lost',
-        }
-      }
+      })
 
       // 检查胜利
-      const won = checkWin(newBoard)
+      const won = hitMine ? false : checkWin(newBoard)
 
       return {
         ...prevState,
         board: newBoard,
-        status: won ? 'won' : 'playing',
+        status: hitMine ? 'lost' : (won ? 'won' : 'playing'),
       }
     })
   }, [])

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useDeferredValue } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RotateCcw, Bomb, Timer, Trophy, Skull, Volume2, VolumeX } from 'lucide-react'
 import confetti from 'canvas-confetti'
@@ -49,6 +49,8 @@ function App() {
     chordOpen,
     reset,
   } = useMinesweeper(config)
+
+  const deferredBoard = useDeferredValue(board)
 
   const rowsValue = clampNumber(rowsInput === '' ? DEFAULT_CONFIG.rows : Number(rowsInput), MIN_ROWS, MAX_ROWS)
   const colsValue = clampNumber(colsInput === '' ? DEFAULT_CONFIG.cols : Number(colsInput), MIN_COLS, MAX_COLS)
@@ -345,7 +347,7 @@ function App() {
 
         {/* 游戏棋盘 */}
         <Board
-          board={board}
+          board={deferredBoard}
           status={status}
           onOpenCell={openCell}
           onFlagCell={toggleFlag}

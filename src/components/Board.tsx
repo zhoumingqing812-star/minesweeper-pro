@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Cell } from './Cell'
 import { cn } from '../lib/utils'
@@ -37,16 +37,50 @@ export function Board({
   const rows = board.length
   const boardRef = useRef<HTMLDivElement>(null)
   const [cellSize, setCellSize] = useState(MAX_CELL_SIZE)
+  const [scrollState, setScrollState] = useState({
+    maxScrollLeft: 0,
+    maxScrollTop: 0,
+    scrollLeft: 0,
+    scrollTop: 0,
+  })
 
-  // 拖动状态
-  const [position, setPosition] = useState({ x: 0, y: 0 })
-  const [isDragging, setIsDragging] = useState(false)
-  const dragStart = useRef({ x: 0, y: 0 })
-  const positionStart = useRef({ x: 0, y: 0 })
-  const hasMoved = useRef(false)
-
-  // 判断是否是大棋盘（需要拖动）
+  // 判断是否是大棋盘（需要滚动）
   const isLargeBoard = cols > 16 || rows > 16
+  const shouldReduceMotion = rows * cols >= 256
+  const SLIDER_PRECISION = 1000
+
+  const updateScrollMetrics = useCallback(() => {
+    const container = boardRef.current
+    if (!container) return
+
+    const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth)
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+
+    setScrollState({
+      maxScrollLeft,
+      maxScrollTop,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+    })
+  }, [])
+
+  const handleHorizontalSliderChange = (value: number) => {
+    const container = boardRef.current
+    if (!container || scrollState.maxScrollLeft === 0) return
+
+    const target = (scrollState.maxScrollLeft * value) / SLIDER_PRECISION
+    container.scrollTo({ left: target, behavior: 'smooth' })
+    setScrollState(prev => ({ ...prev, scrollLeft: target }))
+  }
+
+  const handleVerticalSliderChange = (value: number) => {
+    const container = boardRef.current
+    if (!container || scrollState.maxScrollTop === 0) return
+
+    const target = (scrollState.maxScrollTop * value) / SLIDER_PRECISION
+    container.scrollTo({ top: target, behavior: 'smooth' })
+    setScrollState(prev => ({ ...prev, scrollTop: target }))
+  }
 
   // 计算自适应单元格大小
   useEffect(() => {
@@ -62,100 +96,34 @@ export function Board({
     return () => window.removeEventListener('resize', calculateCellSize)
   }, [cols])
 
-  // 当棋盘大小改变时重置位置
+  // 同步滚动信息（用于滑动条）
   useEffect(() => {
-    setPosition({ x: 0, y: 0 })
-  }, [cols, rows])
+    updateScrollMetrics()
+  }, [rows, cols, cellSize, updateScrollMetrics])
 
-  // 鼠标拖动 - 只在背景上启动拖动
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isLargeBoard || e.button !== 0) return
+  useEffect(() => {
+    const container = boardRef.current
+    if (!container) return
 
-    // 检查是否点击在格子上
-    const target = e.target as HTMLElement
-    if (target.closest('button')) return
-
-    dragStart.current = { x: e.clientX, y: e.clientY }
-    positionStart.current = { ...position }
-    hasMoved.current = false
-
-    // 添加文档级别的监听
-    document.addEventListener('mousemove', handleDocumentMouseMove)
-    document.addEventListener('mouseup', handleDocumentMouseUp)
-
-    e.preventDefault()
-  }
-
-  const handleDocumentMouseMove = (e: MouseEvent) => {
-    const dx = e.clientX - dragStart.current.x
-    const dy = e.clientY - dragStart.current.y
-
-    // 只有移动距离超过阈值才认为是拖动
-    if (!hasMoved.current && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-      hasMoved.current = true
-      setIsDragging(true)
+    const handleScroll = () => {
+      setScrollState(prev => ({
+        ...prev,
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+      }))
     }
 
-    if (hasMoved.current) {
-      setPosition({
-        x: positionStart.current.x + dx,
-        y: positionStart.current.y + dy,
-      })
+    window.addEventListener('resize', updateScrollMetrics)
+    container.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener('resize', updateScrollMetrics)
+      container.removeEventListener('scroll', handleScroll)
     }
-  }
+  }, [updateScrollMetrics])
 
-  const handleDocumentMouseUp = () => {
-    document.removeEventListener('mousemove', handleDocumentMouseMove)
-    document.removeEventListener('mouseup', handleDocumentMouseUp)
-    setIsDragging(false)
-    hasMoved.current = false
-  }
-
-  // 触摸拖动
-  const touchStart = useRef({ x: 0, y: 0 })
-  const touchHasMoved = useRef(false)
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (!isLargeBoard || e.touches.length !== 1) return
-
-    // 检查是否触摸在格子上
-    const target = e.target as HTMLElement
-    if (target.closest('button')) return
-
-    const touch = e.touches[0]
-    touchStart.current = { x: touch.clientX, y: touch.clientY }
-    positionStart.current = { ...position }
-    touchHasMoved.current = false
-  }
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isLargeBoard || e.touches.length !== 1) return
-
-    const touch = e.touches[0]
-    const dx = touch.clientX - touchStart.current.x
-    const dy = touch.clientY - touchStart.current.y
-
-    // 移动距离超过阈值才认为是拖动
-    if (!touchHasMoved.current && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
-      touchHasMoved.current = true
-      setIsDragging(true)
-    }
-
-    if (touchHasMoved.current) {
-      e.preventDefault()
-      setPosition({
-        x: positionStart.current.x + dx,
-        y: positionStart.current.y + dy,
-      })
-    }
-  }
-
-  const handleTouchEnd = () => {
-    setTimeout(() => {
-      setIsDragging(false)
-      touchHasMoved.current = false
-    }, 50)
-  }
+  const showHorizontalSlider = scrollState.maxScrollLeft > 8
+  const showVerticalSlider = scrollState.maxScrollTop > 8
 
   return (
     <div className="relative">
@@ -165,20 +133,20 @@ export function Board({
           "relative p-3 sm:p-4 md:p-6 rounded-xl sm:rounded-2xl",
           "bg-gray-900/40 backdrop-blur-xl border border-gray-700/50",
           "shadow-2xl shadow-black/50",
-          isLargeBoard ? "overflow-hidden" : "max-w-full overflow-auto"
+          // 使用原生滚动
+          isLargeBoard && "max-w-[90vw] max-h-[70vh] overflow-auto",
+          !isLargeBoard && "max-w-full"
         )}
         style={{
-          maxWidth: isLargeBoard ? '90vw' : undefined,
-          maxHeight: isLargeBoard ? '70vh' : undefined,
-          cursor: isDragging ? 'grabbing' : (isLargeBoard ? 'grab' : 'default'),
+          // 平滑滚动
+          scrollBehavior: 'smooth',
+          WebkitOverflowScrolling: 'touch', // iOS 平滑滚动
+          touchAction: isLargeBoard ? 'pan-x pan-y' : 'manipulation',
+          overscrollBehavior: 'contain',
         }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
         {/* 背景光晕效果 */}
         <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500/10 via-transparent to-cyan-500/10 pointer-events-none" />
@@ -189,8 +157,6 @@ export function Board({
           style={{
             gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`,
             gap: `${CELL_GAP}px`,
-            transform: isLargeBoard ? `translate(${position.x}px, ${position.y}px)` : undefined,
-            transition: isDragging ? 'none' : 'transform 0.2s ease-out',
           }}
         >
           {board.map((row, rowIndex) =>
@@ -203,16 +169,55 @@ export function Board({
                 onFlag={() => onFlagCell(rowIndex, colIndex)}
                 onChord={() => onChordCell(rowIndex, colIndex)}
                 gameOver={gameOver}
+                reduceMotion={shouldReduceMotion}
               />
             ))
           )}
         </div>
+
+        {/* 纵向滑动条 */}
+        {showVerticalSlider && (
+          <div className="absolute top-1/2 -translate-y-1/2 right-1 flex flex-col items-center gap-1 bg-gray-900/50 rounded-full px-1 py-2 shadow-inner shadow-black/30">
+            <span className="text-[10px] text-gray-400 tracking-widest">上下</span>
+            <input
+              type="range"
+              min={0}
+              max={SLIDER_PRECISION}
+              value={
+                scrollState.maxScrollTop === 0
+                  ? 0
+                  : (scrollState.scrollTop / scrollState.maxScrollTop) * SLIDER_PRECISION
+              }
+              onChange={(event) => handleVerticalSliderChange(Number(event.target.value))}
+              className="scroll-slider scroll-slider--vertical"
+            />
+          </div>
+        )}
       </motion.div>
+
+      {/* 横向滑动条 */}
+      {showHorizontalSlider && (
+        <div className="mt-3 flex items-center gap-2 px-2">
+          <span className="text-[11px] text-gray-400 tracking-widest">左右</span>
+          <input
+            type="range"
+            min={0}
+            max={SLIDER_PRECISION}
+            value={
+              scrollState.maxScrollLeft === 0
+                ? 0
+                : (scrollState.scrollLeft / scrollState.maxScrollLeft) * SLIDER_PRECISION
+            }
+            onChange={(event) => handleHorizontalSliderChange(Number(event.target.value))}
+            className="scroll-slider flex-1"
+          />
+        </div>
+      )}
 
       {/* 操作提示 */}
       {isLargeBoard && (
         <p className="mt-2 text-xs text-gray-500 text-center">
-          Drag the background to move • Click cells to play
+          Scroll to view the entire board • Long press to flag on mobile
         </p>
       )}
     </div>

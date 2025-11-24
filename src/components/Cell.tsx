@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useMemo, memo } from 'react'
 import { motion } from 'framer-motion'
 import { Bomb, Flag } from 'lucide-react'
 import { cn } from '../lib/utils'
@@ -12,6 +12,7 @@ interface CellProps {
   onFlag: () => void
   onChord: () => void
   gameOver: boolean
+  reduceMotion: boolean
 }
 
 // 数字颜色映射 - 霓虹色系
@@ -27,16 +28,30 @@ const NUMBER_COLORS: Record<number, string> = {
 }
 
 const LONG_PRESS_DURATION = 400 // 减少长按时间以提高响应性
+const LONG_PRESS_RESET_DELAY = 150
 
-export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: CellProps) {
+function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, reduceMotion }: CellProps) {
   const { isOpen, isFlagged, isMine, neighborCount } = cell
   const longPressTimer = useRef<number | null>(null)
   const isLongPress = useRef(false)
   const touchMoved = useRef(false)
+  // 长按插旗保护：标记是否刚完成长按插旗，需要松手后才能再次长按取消
+  const longPressGuard = useRef(false)
 
   // 根据cellSize动态调整字体和图标大小
   const fontSize = Math.max(12, Math.min(16, cellSize * 0.4))
   const iconSize = Math.max(14, Math.min(20, cellSize * 0.5))
+
+  // 缓存 style 对象，避免每次渲染创建新对象
+  const cellStyle = useMemo(
+    () => ({
+      width: `${cellSize}px`,
+      height: `${cellSize}px`,
+      fontSize: `${fontSize}px`,
+      borderRadius: cellSize > 30 ? '8px' : '6px',
+    }),
+    [cellSize, fontSize]
+  )
 
   const handleClick = () => {
     if (isLongPress.current) {
@@ -69,6 +84,13 @@ export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: Cell
   // 长按支持（移动端插旗）
   const handleTouchStart = () => {
     if (gameOver || isOpen) return
+
+    // 长按保护：如果刚完成长按插旗，阻止立即开始新的长按
+    // 用户需要先松手（在touchEnd中重置），再按下才能取消旗子
+    if (longPressGuard.current) {
+      return
+    }
+
     isLongPress.current = false
     touchMoved.current = false
     longPressTimer.current = window.setTimeout(() => {
@@ -80,6 +102,8 @@ export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: Cell
         if (navigator.vibrate) {
           navigator.vibrate(50)
         }
+        // 设置保护标志：刚完成长按插旗，需要松手后才能再次长按
+        longPressGuard.current = true
       }
     }, LONG_PRESS_DURATION)
   }
@@ -94,6 +118,12 @@ export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: Cell
       e.preventDefault()
     }
     touchMoved.current = false
+
+    // 重置长按保护标志：松手后允许再次长按取消旗子
+    // 延迟重置，确保不会在同一个触摸事件中立即触发新的长按
+    setTimeout(() => {
+      longPressGuard.current = false
+    }, LONG_PRESS_RESET_DELAY)
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -137,35 +167,39 @@ export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: Cell
               'active:scale-95',
             ]
       )}
-      style={{
-        width: `${cellSize}px`,
-        height: `${cellSize}px`,
-        fontSize: `${fontSize}px`,
-        borderRadius: cellSize > 30 ? '8px' : '6px',
-      }}
+      style={cellStyle}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
-      whileHover={!isOpen && !gameOver ? { scale: 1.05 } : {}}
-      whileTap={!isOpen && !gameOver ? { scale: 0.95 } : {}}
+      whileHover={!reduceMotion && !isOpen && !gameOver ? { scale: 1.05 } : undefined}
+      whileTap={!reduceMotion && !isOpen && !gameOver ? { scale: 0.95 } : undefined}
       disabled={gameOver && !isOpen}
     >
       {/* 旗帜 */}
       {!isOpen && isFlagged && (
         <motion.div
-          initial={{ scale: 0, y: -20 }}
-          animate={{
-            scale: [0, 1.3, 1],
-            y: [-20, 2, 0],
-          }}
-          exit={{ scale: 0, y: -10 }}
-          transition={{
-            duration: 0.4,
-            ease: [0.34, 1.56, 0.64, 1],
-          }}
+          initial={
+            reduceMotion
+              ? false
+              : { scale: 0, y: -20 }
+          }
+          animate={
+            reduceMotion
+              ? { scale: 1, y: 0 }
+              : {
+                  scale: [0, 1.3, 1],
+                  y: [-20, 2, 0],
+                }
+          }
+          exit={reduceMotion ? { scale: 0, opacity: 0 } : { scale: 0, y: -10 }}
+          transition={
+            reduceMotion
+              ? { duration: 0.15 }
+              : { duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }
+          }
         >
           <Flag
             style={{ width: iconSize, height: iconSize }}
@@ -178,12 +212,20 @@ export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: Cell
       {/* 地雷 */}
       {isOpen && isMine && (
         <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1, rotate: [0, -10, 10, -10, 10, 0] }}
-          transition={{
-            scale: { type: 'spring', stiffness: 500, damping: 25 },
-            rotate: { duration: 0.5, delay: 0.1 },
-          }}
+          initial={reduceMotion ? false : { scale: 0 }}
+          animate={
+            reduceMotion
+              ? { scale: 1 }
+              : { scale: 1, rotate: [0, -10, 10, -10, 10, 0] }
+          }
+          transition={
+            reduceMotion
+              ? { duration: 0.2 }
+              : {
+                  scale: { type: 'spring', stiffness: 500, damping: 25 },
+                  rotate: { duration: 0.5, delay: 0.1 },
+                }
+          }
         >
           <Bomb
             style={{ width: iconSize, height: iconSize }}
@@ -196,9 +238,13 @@ export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: Cell
       {isOpen && !isMine && neighborCount > 0 && (
         <motion.span
           className={cn('font-mono', NUMBER_COLORS[neighborCount])}
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+          initial={reduceMotion ? { opacity: 0 } : { scale: 0, opacity: 0 }}
+          animate={reduceMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }}
+          transition={
+            reduceMotion
+              ? { duration: 0.2 }
+              : { type: 'spring', stiffness: 500, damping: 25 }
+          }
         >
           {neighborCount}
         </motion.span>
@@ -206,3 +252,19 @@ export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: Cell
     </motion.button>
   )
 }
+
+// 使用 memo 优化性能，只在关键属性变化时重渲染
+export const Cell = memo(CellComponent, (prevProps, nextProps) => {
+  // 自定义比较函数：只有这些属性变化时才重渲染
+  return (
+    prevProps.cell.isOpen === nextProps.cell.isOpen &&
+    prevProps.cell.isFlagged === nextProps.cell.isFlagged &&
+    prevProps.cell.isMine === nextProps.cell.isMine &&
+    prevProps.cell.neighborCount === nextProps.cell.neighborCount &&
+    prevProps.cellSize === nextProps.cellSize &&
+    prevProps.gameOver === nextProps.gameOver
+    // 注意：onOpen, onFlag, onChord 回调函数变化不触发重渲染（假设是稳定的）
+  )
+})
+
+Cell.displayName = 'Cell'

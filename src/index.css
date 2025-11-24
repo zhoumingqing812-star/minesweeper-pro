@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.scroll-slider {
+  accent-color: #a855f7;
+  width: 100%;
+  touch-action: none;
+}
+
+.scroll-slider--vertical {
+  width: 28px;
+  height: 140px;
+  writing-mode: bt-lr;
+  -webkit-appearance: slider-vertical;
+}
+
+@supports not (-webkit-appearance: slider-vertical) {
+  .scroll-slider--vertical {
+    transform: rotate(-90deg);
+    width: 140px;
+    height: 28px;
+  }
+}
