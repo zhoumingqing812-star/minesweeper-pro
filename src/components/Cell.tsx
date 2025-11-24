@@ -87,6 +87,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
 
   return (
     <motion.button
+      data-cell
       className={cn(
         'relative w-full aspect-square rounded-md sm:rounded-lg md:rounded-xl',
         'text-xs xs:text-sm sm:text-base md:text-lg font-bold',
