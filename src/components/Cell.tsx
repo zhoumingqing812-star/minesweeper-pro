@@ -34,6 +34,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
   const isLongPress = useRef(false)
   const touchStartPos = useRef<{ x: number; y: number } | null>(null)
   const justFlaggedByLongPress = useRef(false) // 标记是否刚刚通过长按插旗
+  const isLongPressing = useRef(false) // 标记是否正在长按中（已触发长按但未松手）
 
   const handleClick = () => {
     // 如果是长按触发的点击，忽略它
@@ -68,6 +69,11 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
   const handleTouchStart = (e: React.TouchEvent) => {
     if (gameOver || isOpen) return
 
+    // 如果正在长按中（已触发长按但未松手），不启动新的长按计时器
+    if (isLongPressing.current) {
+      return
+    }
+
     isLongPress.current = false
     touchStartPos.current = {
       x: e.touches[0].clientX,
@@ -76,6 +82,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
 
     longPressTimer.current = window.setTimeout(() => {
       isLongPress.current = true
+      isLongPressing.current = true // 标记正在长按中
       justFlaggedByLongPress.current = true // 标记刚刚通过长按插旗
       onFlag()
       soundEffects.playFlag()
@@ -104,11 +111,13 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
         clearTimeout(longPressTimer.current)
         longPressTimer.current = null
       }
-      // 如果已经触发了长按，也重置标志（虽然理论上不应该发生）
+      // 如果已经触发了长按，也重置标志
       if (isLongPress.current) {
         isLongPress.current = false
         justFlaggedByLongPress.current = false
       }
+      // 重置长按状态，允许重新开始长按
+      isLongPressing.current = false
     }
   }
 
@@ -136,6 +145,9 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
       }, 300)
     }
 
+    // 松手时重置长按状态，允许下次长按操作
+    isLongPressing.current = false
+    isLongPress.current = false
     touchStartPos.current = null
   }
 
