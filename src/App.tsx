@@ -11,7 +11,6 @@ const MIN_ROWS = 5
 const MAX_ROWS = 30
 const MIN_COLS = 5
 const MAX_COLS = 40
-const MINE_DENSITY = 0.16
 
 const clampNumber = (value: number, min: number, max: number) => {
   if (Number.isNaN(value)) return min
@@ -23,8 +22,11 @@ const clampMines = (value: number, rows: number, cols: number) => {
   return clampNumber(value, 1, maxMines)
 }
 
+// 根据棋盘大小推荐地雷数（参考经典扫雷的分段密度）
 const getRecommendedMines = (rows: number, cols: number) => {
-  return clampMines(Math.round(rows * cols * MINE_DENSITY), rows, cols)
+  const total = rows * cols
+  const density = total <= 100 ? 0.15 : total <= 300 ? 0.17 : 0.20
+  return clampMines(Math.round(total * density), rows, cols)
 }
 
 function App() {
@@ -273,7 +275,7 @@ function App() {
             <div className="text-sm text-gray-400">
               推荐地雷数：{' '}
               <span className="font-mono text-purple-300">{recommendedMines}</span>
-              <span className="text-gray-500">（约 {Math.round(MINE_DENSITY * 100)}% 面积）</span>
+              <span className="text-gray-500">（约 {Math.round((recommendedMines / (rowsValue * colsValue)) * 100)}% 密度）</span>
             </div>
 
             <div className="flex gap-2">

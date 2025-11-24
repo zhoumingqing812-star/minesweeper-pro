@@ -7,6 +7,7 @@ import type { Cell as CellType } from '../hooks/useMinesweeper'
 
 interface CellProps {
   cell: CellType
+  cellSize: number
   onOpen: () => void
   onFlag: () => void
   onChord: () => void
@@ -25,12 +26,17 @@ const NUMBER_COLORS: Record<number, string> = {
   8: 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]',
 }
 
-const LONG_PRESS_DURATION = 500
+const LONG_PRESS_DURATION = 400 // 减少长按时间以提高响应性
 
-export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
+export function Cell({ cell, cellSize, onOpen, onFlag, onChord, gameOver }: CellProps) {
   const { isOpen, isFlagged, isMine, neighborCount } = cell
   const longPressTimer = useRef<number | null>(null)
   const isLongPress = useRef(false)
+  const touchMoved = useRef(false)
+
+  // 根据cellSize动态调整字体和图标大小
+  const fontSize = Math.max(12, Math.min(16, cellSize * 0.4))
+  const iconSize = Math.max(14, Math.min(20, cellSize * 0.5))
 
   const handleClick = () => {
     if (isLongPress.current) {
@@ -64,32 +70,52 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
   const handleTouchStart = () => {
     if (gameOver || isOpen) return
     isLongPress.current = false
+    touchMoved.current = false
     longPressTimer.current = window.setTimeout(() => {
-      isLongPress.current = true
-      onFlag()
-      soundEffects.playFlag()
+      if (!touchMoved.current) {
+        isLongPress.current = true
+        onFlag()
+        soundEffects.playFlag()
+        // 触觉反馈
+        if (navigator.vibrate) {
+          navigator.vibrate(50)
+        }
+      }
     }, LONG_PRESS_DURATION)
   }
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
     }
+    // 防止长按后触发点击
+    if (isLongPress.current) {
+      e.preventDefault()
+    }
+    touchMoved.current = false
   }
 
-  const handleTouchMove = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
+  const handleTouchMove = (e: React.TouchEvent) => {
+    // 移动超过20px认为是滚动而非长按
+    const touch = e.touches[0]
+    const startTouch = (e.target as HTMLElement).getBoundingClientRect()
+    const dx = Math.abs(touch.clientX - startTouch.left - startTouch.width / 2)
+    const dy = Math.abs(touch.clientY - startTouch.top - startTouch.height / 2)
+
+    if (dx > 20 || dy > 20) {
+      touchMoved.current = true
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current)
+        longPressTimer.current = null
+      }
     }
   }
 
   return (
     <motion.button
       className={cn(
-        'relative w-7 h-7 xs:w-8 xs:h-8 sm:w-10 sm:h-10 rounded-md sm:rounded-lg',
-        'text-xs xs:text-sm sm:text-base font-bold',
+        'relative rounded-md font-bold',
         'flex items-center justify-center select-none',
         'transition-all duration-200',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30',
@@ -111,6 +137,12 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
               'active:scale-95',
             ]
       )}
+      style={{
+        width: `${cellSize}px`,
+        height: `${cellSize}px`,
+        fontSize: `${fontSize}px`,
+        borderRadius: cellSize > 30 ? '8px' : '6px',
+      }}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
@@ -136,7 +168,8 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
           }}
         >
           <Flag
-            className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.8)]"
+            style={{ width: iconSize, height: iconSize }}
+            className="text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.8)]"
             fill="currentColor"
           />
         </motion.div>
@@ -152,7 +185,10 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver }: CellProps) {
             rotate: { duration: 0.5, delay: 0.1 },
           }}
         >
-          <Bomb className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
+          <Bomb
+            style={{ width: iconSize, height: iconSize }}
+            className="text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]"
+          />
         </motion.div>
       )}
 

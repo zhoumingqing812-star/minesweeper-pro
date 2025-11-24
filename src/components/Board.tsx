@@ -12,6 +12,19 @@ interface BoardProps {
   onChordCell: (row: number, col: number) => void
 }
 
+// 单元格大小配置
+const MIN_CELL_SIZE = 20
+const MAX_CELL_SIZE = 40
+const CELL_GAP = 4
+
+// 计算自适应单元格大小
+const computeCellSize = (cols: number, availableWidth: number): number => {
+  const totalGap = CELL_GAP * (cols - 1)
+  const usableWidth = Math.max(availableWidth - totalGap - 48, MIN_CELL_SIZE * cols) // 48px for padding
+  const size = Math.floor(usableWidth / cols)
+  return Math.min(MAX_CELL_SIZE, Math.max(MIN_CELL_SIZE, size))
+}
+
 export function Board({
   board,
   status,
@@ -22,6 +35,8 @@ export function Board({
   const gameOver = status === 'won' || status === 'lost'
   const cols = board[0]?.length || 0
   const rows = board.length
+  const boardRef = useRef<HTMLDivElement>(null)
+  const [cellSize, setCellSize] = useState(MAX_CELL_SIZE)
 
   // 拖动状态
   const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -32,6 +47,20 @@ export function Board({
 
   // 判断是否是大棋盘（需要拖动）
   const isLargeBoard = cols > 16 || rows > 16
+
+  // 计算自适应单元格大小
+  useEffect(() => {
+    const calculateCellSize = () => {
+      const viewportWidth = window.innerWidth
+      const maxBoardWidth = Math.min(viewportWidth * 0.9, 1200) // 最大宽度限制
+      const newSize = computeCellSize(cols, maxBoardWidth)
+      setCellSize(newSize)
+    }
+
+    calculateCellSize()
+    window.addEventListener('resize', calculateCellSize)
+    return () => window.removeEventListener('resize', calculateCellSize)
+  }, [cols])
 
   // 当棋盘大小改变时重置位置
   useEffect(() => {
@@ -131,6 +160,7 @@ export function Board({
   return (
     <div className="relative">
       <motion.div
+        ref={boardRef}
         className={cn(
           "relative p-3 sm:p-4 md:p-6 rounded-xl sm:rounded-2xl",
           "bg-gray-900/40 backdrop-blur-xl border border-gray-700/50",
@@ -155,9 +185,10 @@ export function Board({
 
         {/* 棋盘网格 */}
         <div
-          className="relative grid gap-0.5 xs:gap-1 sm:gap-1.5"
+          className="relative grid"
           style={{
-            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`,
+            gap: `${CELL_GAP}px`,
             transform: isLargeBoard ? `translate(${position.x}px, ${position.y}px)` : undefined,
             transition: isDragging ? 'none' : 'transform 0.2s ease-out',
           }}
@@ -167,6 +198,7 @@ export function Board({
               <Cell
                 key={`${rowIndex}-${colIndex}`}
                 cell={cell}
+                cellSize={cellSize}
                 onOpen={() => onOpenCell(rowIndex, colIndex)}
                 onFlag={() => onFlagCell(rowIndex, colIndex)}
                 onChord={() => onChordCell(rowIndex, colIndex)}
