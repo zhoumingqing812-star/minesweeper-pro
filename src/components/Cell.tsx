@@ -1,4 +1,4 @@
-import { useRef, useMemo, memo } from 'react'
+import { useRef, useMemo, useEffect, memo } from 'react'
 import { motion } from 'framer-motion'
 import { Bomb, Flag } from 'lucide-react'
 import { cn } from '../lib/utils'
@@ -29,6 +29,7 @@ const NUMBER_COLORS: Record<number, string> = {
 
 const LONG_PRESS_DURATION = 400 // 减少长按时间以提高响应性
 const LONG_PRESS_RESET_DELAY = 150
+const MOVE_CANCEL_THRESHOLD = 18
 
 function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, reduceMotion }: CellProps) {
   const { isOpen, isFlagged, isMine, neighborCount } = cell
@@ -37,9 +38,11 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
   const touchMoved = useRef(false)
   // 长按插旗保护：标记是否刚完成长按插旗，需要松手后才能再次长按取消
   const longPressGuard = useRef(false)
-  const activeTouchId = useRef<number | null>(null)
-  const touchStartPoint = useRef<{ x: number; y: number } | null>(null)
+  const activePointerId = useRef<number | null>(null)
+  const pointerStartPoint = useRef<{ x: number; y: number } | null>(null)
   const guardResetTimer = useRef<number | null>(null)
+  const skipContextMenu = useRef(false)
+  const skipContextMenuTimer = useRef<number | null>(null)
 
   // 根据cellSize动态调整字体和图标大小
   const fontSize = Math.max(12, Math.min(16, cellSize * 0.4))
@@ -61,6 +64,16 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
     }
+  }
+
+  const armContextMenuSkipReset = () => {
+    if (skipContextMenuTimer.current) {
+      clearTimeout(skipContextMenuTimer.current)
+    }
+    skipContextMenuTimer.current = window.setTimeout(() => {
+      skipContextMenu.current = false
+      skipContextMenuTimer.current = null
+    }, LONG_PRESS_DURATION)
   }
 
   const resetGuardWithDelay = () => {
@@ -91,6 +104,14 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
+    if (skipContextMenu.current) {
+      skipContextMenu.current = false
+      if (skipContextMenuTimer.current) {
+        clearTimeout(skipContextMenuTimer.current)
+        skipContextMenuTimer.current = null
+      }
+      return
+    }
     if (gameOver || isOpen) return
     onFlag()
     soundEffects.playFlag()
@@ -102,83 +123,109 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
     soundEffects.playClick()
   }
 
-  // 长按支持（移动端插旗）
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const resetPointerState = () => {
+    activePointerId.current = null
+    pointerStartPoint.current = null
+    touchMoved.current = false
+  }
+
+  // 使用 Pointer Events 统一处理长按逻辑
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
     if (gameOver || isOpen) return
+    if (longPressGuard.current) return
 
-    // 长按保护：如果刚完成长按插旗，阻止立即开始新的长按
-    if (longPressGuard.current) {
-      return
-    }
-
-    const touch = e.touches[0]
-    if (!touch) return
-
-    activeTouchId.current = touch.identifier
-    touchStartPoint.current = { x: touch.clientX, y: touch.clientY }
+    activePointerId.current = e.pointerId
+    pointerStartPoint.current = { x: e.clientX, y: e.clientY }
     isLongPress.current = false
     touchMoved.current = false
 
+    clearLongPressTimer()
     longPressTimer.current = window.setTimeout(() => {
-      if (!touchMoved.current && !longPressGuard.current) {
+      if (!touchMoved.current && activePointerId.current === e.pointerId && !longPressGuard.current) {
         isLongPress.current = true
+        longPressGuard.current = true
+        skipContextMenu.current = true
+        armContextMenuSkipReset()
         onFlag()
         soundEffects.playFlag()
         if (navigator.vibrate) {
           navigator.vibrate(50)
         }
-        longPressGuard.current = true
         clearLongPressTimer()
       }
     }, LONG_PRESS_DURATION)
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // 一些浏览器不支持 setPointerCapture
+    }
   }
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const isTrackedTouch = Array.from(e.changedTouches).some(
-      touch => touch.identifier === activeTouchId.current
-    )
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
+    if (activePointerId.current !== e.pointerId || !pointerStartPoint.current) return
 
-    if (!isTrackedTouch) {
-      return
-    }
+    const dx = Math.abs(e.clientX - pointerStartPoint.current.x)
+    const dy = Math.abs(e.clientY - pointerStartPoint.current.y)
+    const threshold = Math.max(MOVE_CANCEL_THRESHOLD, cellSize * 0.3)
 
-    clearLongPressTimer()
-
-    // 防止长按后触发点击
-    if (isLongPress.current) {
-      e.preventDefault()
-    }
-
-    touchMoved.current = false
-    isLongPress.current = false
-    activeTouchId.current = null
-    touchStartPoint.current = null
-
-    // 松手后延迟重置长按保护，确保一个触摸事件只触发一次插旗
-    resetGuardWithDelay()
-  }
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (activeTouchId.current === null || !touchStartPoint.current) {
-      return
-    }
-
-    const trackedTouch = Array.from(e.touches).find(
-      touch => touch.identifier === activeTouchId.current
-    )
-    if (!trackedTouch) {
-      return
-    }
-
-    // 移动超过20px认为是滚动而非长按
-    const dx = Math.abs(trackedTouch.clientX - touchStartPoint.current.x)
-    const dy = Math.abs(trackedTouch.clientY - touchStartPoint.current.y)
-
-    if (dx > 20 || dy > 20) {
+    if (dx > threshold || dy > threshold) {
       touchMoved.current = true
       clearLongPressTimer()
     }
   }
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
+    if (activePointerId.current !== e.pointerId) return
+
+    clearLongPressTimer()
+    if (isLongPress.current) {
+      e.preventDefault()
+    }
+    isLongPress.current = false
+    resetPointerState()
+    resetGuardWithDelay()
+
+    try {
+      if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
+    if (activePointerId.current !== e.pointerId) return
+
+    clearLongPressTimer()
+    isLongPress.current = false
+    resetPointerState()
+
+    try {
+      if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      clearLongPressTimer()
+      if (guardResetTimer.current) {
+        clearTimeout(guardResetTimer.current)
+      }
+      if (skipContextMenuTimer.current) {
+        clearTimeout(skipContextMenuTimer.current)
+      }
+    }
+  }, [])
 
   return (
     <motion.button
@@ -209,10 +256,11 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchMove={handleTouchMove}
-      onTouchCancel={handleTouchEnd}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerCancel}
+      onPointerCancel={handlePointerCancel}
       whileHover={!reduceMotion && !isOpen && !gameOver ? { scale: 1.05 } : undefined}
       whileTap={!reduceMotion && !isOpen && !gameOver ? { scale: 0.95 } : undefined}
       disabled={gameOver && !isOpen}
