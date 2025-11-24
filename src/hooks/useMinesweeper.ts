@@ -25,12 +25,11 @@ export interface MinesweeperState {
   config: GameConfig
 }
 
-// 预设难度
-export const DIFFICULTY_PRESETS = {
-  beginner: { rows: 9, cols: 9, mines: 10 },
-  intermediate: { rows: 16, cols: 16, mines: 40 },
-  expert: { rows: 16, cols: 30, mines: 99 },
-} as const
+export const DEFAULT_CONFIG: GameConfig = {
+  rows: 9,
+  cols: 9,
+  mines: 10,
+}
 
 // 八个方向的偏移量
 const DIRECTIONS = [
@@ -39,7 +38,7 @@ const DIRECTIONS = [
   [1, -1],  [1, 0], [1, 1],
 ]
 
-export function useMinesweeper(initialConfig: GameConfig = DIFFICULTY_PRESETS.beginner) {
+export function useMinesweeper(initialConfig: GameConfig = DEFAULT_CONFIG) {
   const [state, setState] = useState<MinesweeperState>(() => ({
     board: createEmptyBoard(initialConfig.rows, initialConfig.cols),
     status: 'idle',

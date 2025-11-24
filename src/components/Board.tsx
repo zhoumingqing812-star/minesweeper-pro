@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Cell } from './Cell'
 import { cn } from '../lib/utils'
@@ -10,41 +10,6 @@ interface BoardProps {
   onOpenCell: (row: number, col: number) => void
   onFlagCell: (row: number, col: number) => void
   onChordCell: (row: number, col: number) => void
-  difficulty?: 'beginner' | 'intermediate' | 'expert'
-}
-
-const CELL_GAP = 4
-const MIN_CELL_SIZE = 20
-const MAX_CELL_SIZE = 36
-
-// 计算格子大小，根据可用宽度自适应
-function computeCellSize(columns: number, containerRef: React.RefObject<HTMLDivElement | null>): number {
-  if (columns === 0) return MAX_CELL_SIZE
-
-  // 获取容器可用宽度
-  const container = containerRef.current
-  if (!container) {
-    // 如果容器还未渲染，使用窗口宽度作为估算
-    const availableWidth = Math.min(window.innerWidth * 0.95 - 64, 960) // 减去 padding
-    const totalGap = CELL_GAP * (columns - 1)
-    const usableWidth = Math.max(availableWidth - totalGap, MIN_CELL_SIZE * columns)
-    const size = Math.floor(usableWidth / columns)
-    return Math.max(MIN_CELL_SIZE, Math.min(size, MAX_CELL_SIZE))
-  }
-
-  // 获取容器的实际可用宽度（减去 padding）
-  const containerStyle = window.getComputedStyle(container)
-  const paddingLeft = parseFloat(containerStyle.paddingLeft) || 0
-  const paddingRight = parseFloat(containerStyle.paddingRight) || 0
-  const availableWidth = container.clientWidth - paddingLeft - paddingRight
-
-  // 计算格子大小
-  const totalGap = CELL_GAP * (columns - 1)
-  const usableWidth = Math.max(availableWidth - totalGap, MIN_CELL_SIZE * columns)
-  const size = Math.floor(usableWidth / columns)
-  
-  // 限制在最小和最大范围内
-  return Math.max(MIN_CELL_SIZE, Math.min(size, MAX_CELL_SIZE))
 }
 
 export function Board({
@@ -53,77 +18,148 @@ export function Board({
   onOpenCell,
   onFlagCell,
   onChordCell,
-  difficulty: _difficulty = 'beginner',
 }: BoardProps) {
   const gameOver = status === 'won' || status === 'lost'
   const cols = board[0]?.length || 0
   const rows = board.length
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [cellSizePx, setCellSizePx] = useState(MAX_CELL_SIZE)
 
-  // 初始化时计算格子大小
+  // 拖动状态
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragStart = useRef({ x: 0, y: 0 })
+  const positionStart = useRef({ x: 0, y: 0 })
+  const hasMoved = useRef(false)
+
+  // 判断是否是大棋盘（需要拖动）
+  const isLargeBoard = cols > 16 || rows > 16
+
+  // 当棋盘大小改变时重置位置
   useEffect(() => {
-    const newSize = computeCellSize(cols, containerRef)
-    setCellSizePx(newSize)
-  }, [cols])
+    setPosition({ x: 0, y: 0 })
+  }, [cols, rows])
 
-  // 监听窗口大小变化
-  useEffect(() => {
-    const updateCellSize = () => {
-      const newSize = computeCellSize(cols, containerRef)
-      setCellSizePx(newSize)
+  // 鼠标拖动 - 只在背景上启动拖动
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isLargeBoard || e.button !== 0) return
+
+    // 检查是否点击在格子上
+    const target = e.target as HTMLElement
+    if (target.closest('button')) return
+
+    dragStart.current = { x: e.clientX, y: e.clientY }
+    positionStart.current = { ...position }
+    hasMoved.current = false
+
+    // 添加文档级别的监听
+    document.addEventListener('mousemove', handleDocumentMouseMove)
+    document.addEventListener('mouseup', handleDocumentMouseUp)
+
+    e.preventDefault()
+  }
+
+  const handleDocumentMouseMove = (e: MouseEvent) => {
+    const dx = e.clientX - dragStart.current.x
+    const dy = e.clientY - dragStart.current.y
+
+    // 只有移动距离超过阈值才认为是拖动
+    if (!hasMoved.current && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+      hasMoved.current = true
+      setIsDragging(true)
     }
 
-    const handleResize = () => {
-      updateCellSize()
+    if (hasMoved.current) {
+      setPosition({
+        x: positionStart.current.x + dx,
+        y: positionStart.current.y + dy,
+      })
+    }
+  }
+
+  const handleDocumentMouseUp = () => {
+    document.removeEventListener('mousemove', handleDocumentMouseMove)
+    document.removeEventListener('mouseup', handleDocumentMouseUp)
+    setIsDragging(false)
+    hasMoved.current = false
+  }
+
+  // 触摸拖动
+  const touchStart = useRef({ x: 0, y: 0 })
+  const touchHasMoved = useRef(false)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isLargeBoard || e.touches.length !== 1) return
+
+    // 检查是否触摸在格子上
+    const target = e.target as HTMLElement
+    if (target.closest('button')) return
+
+    const touch = e.touches[0]
+    touchStart.current = { x: touch.clientX, y: touch.clientY }
+    positionStart.current = { ...position }
+    touchHasMoved.current = false
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isLargeBoard || e.touches.length !== 1) return
+
+    const touch = e.touches[0]
+    const dx = touch.clientX - touchStart.current.x
+    const dy = touch.clientY - touchStart.current.y
+
+    // 移动距离超过阈值才认为是拖动
+    if (!touchHasMoved.current && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+      touchHasMoved.current = true
+      setIsDragging(true)
     }
 
-    window.addEventListener('resize', handleResize)
-    // 使用 ResizeObserver 监听容器大小变化（更精确）
-    const resizeObserver = new ResizeObserver(() => {
-      updateCellSize()
-    })
-
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current)
+    if (touchHasMoved.current) {
+      e.preventDefault()
+      setPosition({
+        x: positionStart.current.x + dx,
+        y: positionStart.current.y + dy,
+      })
     }
+  }
 
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      resizeObserver.disconnect()
-    }
-  }, [cols])
+  const handleTouchEnd = () => {
+    setTimeout(() => {
+      setIsDragging(false)
+      touchHasMoved.current = false
+    }, 50)
+  }
 
   return (
     <div className="relative">
       <motion.div
-        ref={containerRef}
         className={cn(
-          "relative p-4 sm:p-5 md:p-6 lg:p-8 rounded-xl sm:rounded-2xl",
+          "relative p-3 sm:p-4 md:p-6 rounded-xl sm:rounded-2xl",
           "bg-gray-900/40 backdrop-blur-xl border border-gray-700/50",
           "shadow-2xl shadow-black/50",
-          "overflow-auto custom-scrollbar" // 内容超出时显示滚动条
+          isLargeBoard ? "overflow-hidden" : "max-w-full overflow-auto"
         )}
         style={{
-          maxWidth: '95vw',
-          maxHeight: '75vh',
+          maxWidth: isLargeBoard ? '90vw' : undefined,
+          maxHeight: isLargeBoard ? '70vh' : undefined,
+          cursor: isDragging ? 'grabbing' : (isLargeBoard ? 'grab' : 'default'),
         }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {/* 背景光晕效果 */}
         <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500/10 via-transparent to-cyan-500/10 pointer-events-none" />
 
-        {/* 棋盘网格 - 自适应大小 */}
+        {/* 棋盘网格 */}
         <div
-          className="relative grid justify-center"
+          className="relative grid gap-0.5 xs:gap-1 sm:gap-1.5"
           style={{
-            gridTemplateColumns: `repeat(${cols}, ${cellSizePx}px)`,
-            gridTemplateRows: `repeat(${rows}, ${cellSizePx}px)`,
-            gap: `${CELL_GAP}px`,
-            width: 'fit-content',
-            margin: '0 auto',
+            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+            transform: isLargeBoard ? `translate(${position.x}px, ${position.y}px)` : undefined,
+            transition: isDragging ? 'none' : 'transform 0.2s ease-out',
           }}
         >
           {board.map((row, rowIndex) =>
@@ -135,7 +171,6 @@ export function Board({
                 onFlag={() => onFlagCell(rowIndex, colIndex)}
                 onChord={() => onChordCell(rowIndex, colIndex)}
                 gameOver={gameOver}
-                size={cellSizePx}
               />
             ))
           )}
@@ -143,9 +178,11 @@ export function Board({
       </motion.div>
 
       {/* 操作提示 */}
-      <p className="mt-2 text-xs text-gray-500 text-center">
-        使用滚动条移动棋盘 • 点击格子进行游戏
-      </p>
+      {isLargeBoard && (
+        <p className="mt-2 text-xs text-gray-500 text-center">
+          Drag the background to move • Click cells to play
+        </p>
+      )}
     </div>
   )
 }

@@ -2,15 +2,36 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RotateCcw, Bomb, Timer, Trophy, Skull, Volume2, VolumeX } from 'lucide-react'
 import confetti from 'canvas-confetti'
-import { useMinesweeper, DIFFICULTY_PRESETS } from './hooks/useMinesweeper'
+import { useMinesweeper, DEFAULT_CONFIG, type GameConfig } from './hooks/useMinesweeper'
 import { Board } from './components/Board'
 import { cn } from './lib/utils'
 import { soundEffects } from './lib/sounds'
 
-type Difficulty = 'beginner' | 'intermediate' | 'expert'
+const MIN_ROWS = 5
+const MAX_ROWS = 30
+const MIN_COLS = 5
+const MAX_COLS = 40
+const MINE_DENSITY = 0.16
+
+const clampNumber = (value: number, min: number, max: number) => {
+  if (Number.isNaN(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+const clampMines = (value: number, rows: number, cols: number) => {
+  const maxMines = Math.max(1, rows * cols - 1)
+  return clampNumber(value, 1, maxMines)
+}
+
+const getRecommendedMines = (rows: number, cols: number) => {
+  return clampMines(Math.round(rows * cols * MINE_DENSITY), rows, cols)
+}
 
 function App() {
-  const [difficulty, setDifficulty] = useState<Difficulty>('beginner')
+  const [config, setConfig] = useState<GameConfig>(DEFAULT_CONFIG)
+  const [rowsInput, setRowsInput] = useState(String(DEFAULT_CONFIG.rows))
+  const [colsInput, setColsInput] = useState(String(DEFAULT_CONFIG.cols))
+  const [minesInput, setMinesInput] = useState(String(DEFAULT_CONFIG.mines))
   const [time, setTime] = useState(0)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const timerRef = useRef<number | null>(null)
@@ -25,7 +46,12 @@ function App() {
     toggleFlag,
     chordOpen,
     reset,
-  } = useMinesweeper(DIFFICULTY_PRESETS[difficulty])
+  } = useMinesweeper(config)
+
+  const rowsValue = clampNumber(rowsInput === '' ? DEFAULT_CONFIG.rows : Number(rowsInput), MIN_ROWS, MAX_ROWS)
+  const colsValue = clampNumber(colsInput === '' ? DEFAULT_CONFIG.cols : Number(colsInput), MIN_COLS, MAX_COLS)
+  const recommendedMines = getRecommendedMines(rowsValue, colsValue)
+  const minesValue = clampMines(minesInput === '' ? recommendedMines : Number(minesInput), rowsValue, colsValue)
 
   // 计时器逻辑
   useEffect(() => {
@@ -105,12 +131,62 @@ function App() {
     reset()
   }
 
-  // 切换难度
-  const handleDifficultyChange = (newDifficulty: Difficulty) => {
-    setDifficulty(newDifficulty)
+  const handleRowsChange = (value: string) => {
+    if (value === '') {
+      setRowsInput('')
+      return
+    }
+
+    const numeric = Number(value)
+    if (Number.isNaN(numeric)) return
+
+    setRowsInput(String(Math.min(MAX_ROWS, Math.max(0, numeric))))
+  }
+
+  const handleColsChange = (value: string) => {
+    if (value === '') {
+      setColsInput('')
+      return
+    }
+
+    const numeric = Number(value)
+    if (Number.isNaN(numeric)) return
+
+    setColsInput(String(Math.min(MAX_COLS, Math.max(0, numeric))))
+  }
+
+  const handleMinesChange = (value: string) => {
+    if (value === '') {
+      setMinesInput('')
+      return
+    }
+
+    const numeric = Number(value)
+    if (Number.isNaN(numeric)) return
+
+    const maxMines = rowsValue * colsValue - 1
+    setMinesInput(String(Math.min(maxMines, Math.max(0, numeric))))
+  }
+
+  // 应用自定义设置
+  const handleApplySettings = () => {
+    const nextConfig: GameConfig = {
+      rows: rowsValue,
+      cols: colsValue,
+      mines: minesValue,
+    }
+
+    setRowsInput(String(nextConfig.rows))
+    setColsInput(String(nextConfig.cols))
+    setMinesInput(String(nextConfig.mines))
+    setConfig(nextConfig)
     setTime(0)
     confettiTriggered.current = false
-    reset(DIFFICULTY_PRESETS[newDifficulty])
+    reset(nextConfig)
+  }
+
+  const handleUseRecommendation = () => {
+    setMinesInput(String(recommendedMines))
   }
 
   // 格式化数字为 LED 显示格式
@@ -136,7 +212,7 @@ function App() {
 
       {/* 主容器 */}
       <motion.div
-        className="relative z-10 flex flex-col items-center gap-3 sm:gap-4 md:gap-6 w-full"
+        className="relative z-10 flex flex-col items-center gap-3 sm:gap-4 md:gap-6 w-full max-w-fit"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
@@ -146,24 +222,80 @@ function App() {
           Minesweeper Pro
         </h1>
 
-        {/* 难度选择 */}
-        <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2">
-          {(['beginner', 'intermediate', 'expert'] as Difficulty[]).map((d) => (
-            <button
-              key={d}
-              onClick={() => handleDifficultyChange(d)}
-              className={cn(
-                'px-2 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium',
-                'transition-all duration-200 border backdrop-blur-sm',
-                difficulty === d
-                  ? 'bg-purple-500/30 border-purple-400/50 text-purple-200 shadow-lg shadow-purple-500/20'
-                  : 'bg-gray-800/50 border-gray-700/50 text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
-              )}
-            >
-              {d.charAt(0).toUpperCase() + d.slice(1)}
-            </button>
-          ))}
-        </div>
+        {/* 自定义棋盘设置 */}
+        <motion.div
+          className="w-full max-w-2xl p-3 sm:p-4 rounded-xl bg-gray-900/50 border border-gray-700/60 backdrop-blur-xl shadow-inner shadow-black/40"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-400">
+              高度（行）
+              <input
+                type="number"
+                min={MIN_ROWS}
+                max={MAX_ROWS}
+                value={rowsInput}
+                onChange={(e) => handleRowsChange(e.target.value)}
+                className="rounded-lg border border-gray-600 bg-gray-800/60 px-3 py-2 text-sm text-gray-100 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none"
+              />
+              <span className="text-[11px] text-gray-500">{MIN_ROWS}-{MAX_ROWS}</span>
+            </label>
+
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-400">
+              宽度（列）
+              <input
+                type="number"
+                min={MIN_COLS}
+                max={MAX_COLS}
+                value={colsInput}
+                onChange={(e) => handleColsChange(e.target.value)}
+                className="rounded-lg border border-gray-600 bg-gray-800/60 px-3 py-2 text-sm text-gray-100 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none"
+              />
+              <span className="text-[11px] text-gray-500">{MIN_COLS}-{MAX_COLS}</span>
+            </label>
+
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-400">
+              地雷数量
+              <input
+                type="number"
+                min={1}
+                max={rowsValue * colsValue - 1}
+                value={minesInput}
+                onChange={(e) => handleMinesChange(e.target.value)}
+                className="rounded-lg border border-gray-600 bg-gray-800/60 px-3 py-2 text-sm text-gray-100 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none"
+              />
+              <span className="text-[11px] text-gray-500">最多 {rowsValue * colsValue - 1}</span>
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-gray-400">
+              推荐地雷数：{' '}
+              <span className="font-mono text-purple-300">{recommendedMines}</span>
+              <span className="text-gray-500">（约 {Math.round(MINE_DENSITY * 100)}% 面积）</span>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleUseRecommendation}
+                className="px-3 py-1.5 rounded-lg border border-purple-500/40 text-xs sm:text-sm text-purple-200 hover:bg-purple-500/10 transition-colors"
+              >
+                使用推荐值
+              </button>
+              <button
+                onClick={handleApplySettings}
+                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-purple-500/70 to-cyan-500/70 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-purple-500/30 hover:shadow-cyan-500/30 transition-transform hover:-translate-y-0.5"
+              >
+                应用设置
+              </button>
+            </div>
+          </div>
+
+          <p className="mt-2 text-xs text-gray-500">
+            当前棋盘：{config.rows} × {config.cols} ，地雷 {config.mines} 枚
+          </p>
+        </motion.div>
 
         {/* 状态栏 */}
         <div className="flex items-center gap-2 sm:gap-4 md:gap-6 p-2 sm:p-3 md:p-4 rounded-lg sm:rounded-xl bg-gray-900/60 backdrop-blur-lg border border-gray-700/50">
@@ -216,7 +348,6 @@ function App() {
           onOpenCell={openCell}
           onFlagCell={toggleFlag}
           onChordCell={chordOpen}
-          difficulty={difficulty}
         />
 
         {/* 移动端提示 */}
