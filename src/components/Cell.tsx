@@ -30,143 +30,144 @@ const LONG_PRESS_DURATION = 400 // 减少到400ms，更快响应
 
 export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: CellProps) {
   const { isOpen, isFlagged, isMine, neighborCount } = cell
-  const hasTriggeredLongPress = useRef(false)
+  const longPressTimerRef = useRef<number | null>(null)
+  const pointerStartTimeRef = useRef<number>(0)
+  const pointerStartPosRef = useRef<{ x: number; y: number } | null>(null)
+  const hasLongPressedRef = useRef(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
-  // 使用原生触摸事件监听器，更可靠
-  useEffect(() => {
-    const button = buttonRef.current
-    if (!button) return
+  // 清除长按定时器
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
 
-    let touchStartTime = 0
-    let touchStartX = 0
-    let touchStartY = 0
-    let longPressTimerId: number | null = null
-    let hasLongPressed = false
+  // 处理指针按下（支持鼠标和触摸）
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // 只处理主指针（鼠标左键或第一个触摸点）
+    if (e.button !== 0 && e.pointerType !== 'touch') return
+    
+    // 如果格子已打开或游戏结束，不处理
+    if (gameOver || isOpen) return
 
-    const handleTouchStart = (e: TouchEvent) => {
-      // 如果格子已打开或游戏结束，不处理
-      if (gameOver || isOpen) {
-        return
-      }
+    // 阻止默认行为，防止滚动和文本选择
+    e.preventDefault()
+    e.stopPropagation()
 
-      // 阻止默认行为
+    // 记录开始时间和位置
+    pointerStartTimeRef.current = Date.now()
+    pointerStartPosRef.current = { x: e.clientX, y: e.clientY }
+    hasLongPressedRef.current = false
+
+    // 如果是触摸，设置按钮为捕获状态
+    if (e.pointerType === 'touch' && buttonRef.current) {
+      buttonRef.current.setPointerCapture(e.pointerId)
+    }
+
+    // 启动长按定时器
+    longPressTimerRef.current = window.setTimeout(() => {
+      hasLongPressedRef.current = true
+      onFlag()
+      soundEffects.playFlag()
+      clearLongPressTimer()
+    }, LONG_PRESS_DURATION)
+  }
+
+  // 处理指针移动
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!pointerStartPosRef.current) return
+
+    const moveDistance = Math.sqrt(
+      Math.pow(e.clientX - pointerStartPosRef.current.x, 2) +
+      Math.pow(e.clientY - pointerStartPosRef.current.y, 2)
+    )
+
+    // 如果移动超过 15px，取消长按
+    if (moveDistance > 15) {
+      clearLongPressTimer()
+      pointerStartPosRef.current = null
+      pointerStartTimeRef.current = 0
+    }
+  }
+
+  // 处理指针抬起
+  const handlePointerUp = (e: React.PointerEvent) => {
+    // 释放捕获
+    if (e.pointerType === 'touch' && buttonRef.current) {
+      buttonRef.current.releasePointerCapture(e.pointerId)
+    }
+
+    // 如果触发了长按，阻止所有后续事件
+    if (hasLongPressedRef.current) {
       e.preventDefault()
       e.stopPropagation()
-
-      const touch = e.touches[0]
-      touchStartTime = Date.now()
-      touchStartX = touch.clientX
-      touchStartY = touch.clientY
-      hasLongPressed = false
-
-      // 启动长按定时器
-      longPressTimerId = window.setTimeout(() => {
-        hasLongPressed = true
-        hasTriggeredLongPress.current = true
-        onFlag()
-        soundEffects.playFlag()
-      }, LONG_PRESS_DURATION)
-    }
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!touchStartTime) return
-
-      const touch = e.touches[0]
-      const moveDistance = Math.sqrt(
-        Math.pow(touch.clientX - touchStartX, 2) +
-        Math.pow(touch.clientY - touchStartY, 2)
-      )
-
-      // 如果移动超过 15px，取消长按
-      if (moveDistance > 15) {
-        if (longPressTimerId) {
-          clearTimeout(longPressTimerId)
-          longPressTimerId = null
-        }
-        touchStartTime = 0
-      }
-    }
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      // 如果触发了长按，阻止所有后续事件
-      if (hasLongPressed) {
-        e.preventDefault()
-        e.stopPropagation()
-        // 延迟重置，防止触发点击
-        setTimeout(() => {
-          hasTriggeredLongPress.current = false
-        }, 200)
-      } else {
-        // 清除长按定时器
-        if (longPressTimerId) {
-          clearTimeout(longPressTimerId)
-          longPressTimerId = null
-        }
-
-        // 检查是否是短按（快速触摸）
-        const touchDuration = Date.now() - touchStartTime
-        const touch = e.changedTouches[0]
-        const moveDistance = Math.sqrt(
-          Math.pow(touch.clientX - touchStartX, 2) +
-          Math.pow(touch.clientY - touchStartY, 2)
-        )
-
-        // 如果触摸时间短且移动距离小，触发点击
-        if (touchDuration < LONG_PRESS_DURATION && moveDistance < 15 && touchStartTime > 0) {
-          // 延迟触发，确保不会与长按冲突
-          setTimeout(() => {
-            if (!hasTriggeredLongPress.current && !gameOver && !isFlagged) {
-              if (isOpen && neighborCount > 0) {
-                onChord()
-                soundEffects.playClick()
-              } else if (!isOpen) {
-                onOpen()
-                soundEffects.playClick()
-              }
-            }
-          }, 50)
-        }
-      }
-
-      touchStartTime = 0
-    }
-
-    const handleTouchCancel = () => {
-      if (longPressTimerId) {
-        clearTimeout(longPressTimerId)
-        longPressTimerId = null
-      }
-      touchStartTime = 0
-      hasLongPressed = false
-    }
-
-    // 添加原生事件监听器，使用 passive: false 确保 preventDefault 生效
-    button.addEventListener('touchstart', handleTouchStart, { passive: false })
-    button.addEventListener('touchmove', handleTouchMove, { passive: false })
-    button.addEventListener('touchend', handleTouchEnd, { passive: false })
-    button.addEventListener('touchcancel', handleTouchCancel, { passive: false })
-
-    return () => {
-      button.removeEventListener('touchstart', handleTouchStart)
-      button.removeEventListener('touchmove', handleTouchMove)
-      button.removeEventListener('touchend', handleTouchEnd)
-      button.removeEventListener('touchcancel', handleTouchCancel)
-      if (longPressTimerId) {
-        clearTimeout(longPressTimerId)
-      }
-    }
-  }, [gameOver, isOpen, onFlag, onOpen, onChord, isFlagged, neighborCount])
-
-  const handleClick = (e?: React.MouseEvent) => {
-    // 如果是触摸触发的点击，且已经触发了长按，则忽略
-    if (hasTriggeredLongPress.current) {
-      if (e) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
+      // 延迟重置，防止触发点击
+      setTimeout(() => {
+        hasLongPressedRef.current = false
+      }, 300)
+      pointerStartPosRef.current = null
+      pointerStartTimeRef.current = 0
       return
     }
+
+    // 清除长按定时器
+    clearLongPressTimer()
+
+    // 检查是否是短按（快速触摸）
+    const touchDuration = Date.now() - pointerStartTimeRef.current
+    const startPos = pointerStartPosRef.current
+    if (startPos) {
+      const moveDistance = Math.sqrt(
+        Math.pow(e.clientX - startPos.x, 2) +
+        Math.pow(e.clientY - startPos.y, 2)
+      )
+
+      // 如果触摸时间短且移动距离小，触发点击
+      if (touchDuration < LONG_PRESS_DURATION && moveDistance < 15 && touchDuration > 0) {
+        // 延迟触发，确保不会与长按冲突
+        setTimeout(() => {
+          if (!hasLongPressedRef.current && !gameOver && !isFlagged) {
+            if (isOpen && neighborCount > 0) {
+              onChord()
+              soundEffects.playClick()
+            } else if (!isOpen) {
+              onOpen()
+              soundEffects.playClick()
+            }
+          }
+        }, 50)
+      }
+    }
+
+    pointerStartPosRef.current = null
+    pointerStartTimeRef.current = 0
+  }
+
+  // 处理指针取消（触摸被中断）
+  const handlePointerCancel = () => {
+    clearLongPressTimer()
+    pointerStartPosRef.current = null
+    pointerStartTimeRef.current = 0
+    hasLongPressedRef.current = false
+  }
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      clearLongPressTimer()
+    }
+  }, [])
+
+  const handleClick = (e: React.MouseEvent) => {
+    // 如果是触摸触发的点击，且已经触发了长按，则忽略
+    if (hasLongPressedRef.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    // 触摸事件由 pointer 事件处理，这里只处理鼠标点击
     if (gameOver || isFlagged) return
     if (isOpen && neighborCount > 0) {
       onChord()
@@ -235,6 +236,10 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
               'active:border-b-gray-300/60 active:border-r-gray-300/60',
             ]
       )}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
@@ -247,6 +252,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
         WebkitTouchCallout: 'none', // 禁用 iOS 长按菜单
         WebkitUserSelect: 'none', // 禁用选择
         userSelect: 'none',
+        WebkitTapHighlightColor: 'transparent', // 禁用点击高亮
       }}
       whileHover={!isOpen && !gameOver ? { scale: 1.02, y: -1 } : {}}
       whileTap={!isOpen && !gameOver ? { scale: 0.98, y: 0 } : {}}
