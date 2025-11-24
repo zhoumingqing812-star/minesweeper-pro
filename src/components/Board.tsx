@@ -130,6 +130,24 @@ export function Board({
     }, 50)
   }
 
+  // 计算格子大小，确保在不同设备上更一致
+  const calculateCellSize = () => {
+    // 根据列数计算合适的格子大小
+    // 使用 clamp 确保在不同设备上格子大小更接近
+    if (cols <= 9) {
+      // Beginner: 9x9 - 更大的格子
+      return 'clamp(32px, 5vw, 45px)'
+    } else if (cols <= 16) {
+      // Intermediate: 16x16 - 中等格子
+      return 'clamp(22px, 3.5vw, 35px)'
+    } else {
+      // Expert: 30x16 - 更小的格子
+      return 'clamp(18px, 2.8vw, 28px)'
+    }
+  }
+
+  const cellSize = calculateCellSize()
+
   return (
     <div className="relative">
       <motion.div
@@ -156,13 +174,15 @@ export function Board({
         {/* 背景光晕效果 */}
         <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500/10 via-transparent to-cyan-500/10 pointer-events-none" />
 
-        {/* 棋盘网格 */}
+        {/* 棋盘网格 - 使用固定格子大小确保一致性 */}
         <div
-          className="relative grid gap-1.5 xs:gap-2 sm:gap-2.5 md:gap-3"
+          className="relative grid"
           style={{
-            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${cols}, ${cellSize})`,
+            gap: 'clamp(3px, 0.6vw, 5px)',
             transform: isLargeBoard ? `translate(${position.x}px, ${position.y}px)` : undefined,
             transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+            justifyContent: 'center',
           }}
         >
           {board.map((row, rowIndex) =>
