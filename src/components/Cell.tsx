@@ -40,7 +40,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
       isLongPress.current = false
       return
     }
-    
+
     if (gameOver || isFlagged) return
     if (isOpen && neighborCount > 0) {
       onChord()
@@ -61,7 +61,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (gameOver || isOpen) return
-    
+
     isLongPress.current = false
     touchStartPos.current = {
       x: e.touches[0].clientX,
@@ -76,7 +76,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
       if (navigator.vibrate) {
         navigator.vibrate(50)
       }
-    }, 500) // 500ms 长按判定
+    }, 400) // 400ms 长按判定，更灵敏
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -87,8 +87,8 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
     const diffX = Math.abs(moveX - touchStartPos.current.x)
     const diffY = Math.abs(moveY - touchStartPos.current.y)
 
-    // 如果移动超过 10px，取消长按
-    if (diffX > 10 || diffY > 10) {
+    // 如果移动超过 20px，取消长按（增加容错）
+    if (diffX > 20 || diffY > 20) {
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current)
         longPressTimer.current = null
@@ -96,11 +96,17 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
     }
   }
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
     }
+
+    // 如果触发了长按，阻止默认事件（防止触发点击）
+    if (isLongPress.current) {
+      e.preventDefault()
+    }
+
     touchStartPos.current = null
   }
 
@@ -129,30 +135,30 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
         roundedSize,
         isOpen
           ? [
-              // 已翻开 - 精致的凹陷效果
-              'bg-gradient-to-br from-gray-800/95 via-gray-900/95 to-gray-800/95',
-              'border-t border-l border-gray-700/60',
-              'border-b border-r border-gray-950/80',
-              'shadow-[inset_2px_2px_4px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.1)]',
-              isMine && [
-                'bg-gradient-to-br from-red-950/90 via-red-900/90 to-red-950/90',
-                'border-red-600/50',
-                'shadow-[inset_2px_2px_4px_rgba(0,0,0,0.6),0_0_8px_rgba(239,68,68,0.4)]',
-              ],
-            ]
+            // 已翻开 - 精致的凹陷效果
+            'bg-gradient-to-br from-gray-800/95 via-gray-900/95 to-gray-800/95',
+            'border-t border-l border-gray-700/60',
+            'border-b border-r border-gray-950/80',
+            'shadow-[inset_2px_2px_4px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.1)]',
+            isMine && [
+              'bg-gradient-to-br from-red-950/90 via-red-900/90 to-red-950/90',
+              'border-red-600/50',
+              'shadow-[inset_2px_2px_4px_rgba(0,0,0,0.6),0_0_8px_rgba(239,68,68,0.4)]',
+            ],
+          ]
           : [
-              // 未翻开 - 精美的3D凸起效果
-              'bg-gradient-to-br from-gray-400 via-gray-500 to-gray-600',
-              'border-t border-l border-gray-300/80',
-              'border-b border-r border-gray-700/80',
-              'shadow-[0_2px_4px_rgba(0,0,0,0.4),inset_-1px_-1px_2px_rgba(255,255,255,0.2)]',
-              'hover:from-gray-300 hover:via-gray-400 hover:to-gray-500',
-              'hover:border-t-gray-200/90 hover:border-l-gray-200/90',
-              'hover:shadow-[0_3px_6px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.3),0_0_12px_rgba(255,255,255,0.1)]',
-              'active:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.05)]',
-              'active:border-t-gray-600/80 active:border-l-gray-600/80',
-              'active:border-b-gray-300/60 active:border-r-gray-300/60',
-            ]
+            // 未翻开 - 精美的3D凸起效果
+            'bg-gradient-to-br from-gray-400 via-gray-500 to-gray-600',
+            'border-t border-l border-gray-300/80',
+            'border-b border-r border-gray-700/80',
+            'shadow-[0_2px_4px_rgba(0,0,0,0.4),inset_-1px_-1px_2px_rgba(255,255,255,0.2)]',
+            'hover:from-gray-300 hover:via-gray-400 hover:to-gray-500',
+            'hover:border-t-gray-200/90 hover:border-l-gray-200/90',
+            'hover:shadow-[0_3px_6px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.3),0_0_12px_rgba(255,255,255,0.1)]',
+            'active:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.5),inset_-1px_-1px_2px_rgba(255,255,255,0.05)]',
+            'active:border-t-gray-600/80 active:border-l-gray-600/80',
+            'active:border-b-gray-300/60 active:border-r-gray-300/60',
+          ]
       )}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
