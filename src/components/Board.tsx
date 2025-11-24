@@ -22,7 +22,6 @@ export function Board({
 }: BoardProps) {
   const gameOver = status === 'won' || status === 'lost'
   const cols = board[0]?.length || 0
-  const rows = board.length
 
   // 统一的格子大小 - 所有模式都使用相同的方形格子
   const cellSize = 'clamp(28px, 4vw, 40px)'
