@@ -57,6 +57,7 @@ export function Board({
             gap: `${gapPx}px`,
             width: 'fit-content',
             margin: '0 auto',
+            touchAction: 'none', // 防止父容器干扰触摸事件
           }}
         >
           {board.map((row, rowIndex) =>
