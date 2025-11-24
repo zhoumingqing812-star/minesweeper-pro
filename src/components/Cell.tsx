@@ -32,10 +32,18 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
   const { isOpen, isFlagged, isMine, neighborCount } = cell
   const longPressTimer = useRef<number | null>(null)
   const isLongPress = useRef(false)
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null)
+  const hasTriggeredLongPress = useRef(false)
 
-  const handleClick = () => {
-    if (isLongPress.current) {
+  const handleClick = (e?: React.MouseEvent) => {
+    // 如果是触摸触发的点击，且已经触发了长按，则忽略
+    if (isLongPress.current || hasTriggeredLongPress.current) {
       isLongPress.current = false
+      hasTriggeredLongPress.current = false
+      if (e) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
       return
     }
     if (gameOver || isFlagged) return
@@ -62,27 +70,86 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
   }
 
   // 长按支持（移动端插旗）
-  const handleTouchStart = () => {
+  const handleTouchStart = (e: React.TouchEvent) => {
     if (gameOver || isOpen) return
+    
+    // 阻止默认行为，防止滚动和选择文本
+    e.preventDefault()
+    e.stopPropagation()
+    
     isLongPress.current = false
+    hasTriggeredLongPress.current = false
+    
+    // 记录触摸起始位置
+    const touch = e.touches[0]
+    touchStartPos.current = { x: touch.clientX, y: touch.clientY }
+    
     longPressTimer.current = window.setTimeout(() => {
       isLongPress.current = true
+      hasTriggeredLongPress.current = true
       onFlag()
       soundEffects.playFlag()
+      // 清除定时器
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current)
+        longPressTimer.current = null
+      }
     }, LONG_PRESS_DURATION)
   }
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    // 阻止默认行为，防止触发点击事件
+    if (hasTriggeredLongPress.current) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
     }
+    
+    // 如果不是长按，且没有移动太多，则触发点击
+    if (!hasTriggeredLongPress.current && touchStartPos.current) {
+      const touch = e.changedTouches[0]
+      const moveDistance = Math.sqrt(
+        Math.pow(touch.clientX - touchStartPos.current.x, 2) +
+        Math.pow(touch.clientY - touchStartPos.current.y, 2)
+      )
+      // 如果移动距离小于 10px，认为是点击
+      if (moveDistance < 10) {
+        // 延迟触发点击，确保长按逻辑完成
+        setTimeout(() => {
+          if (!hasTriggeredLongPress.current) {
+            handleClick()
+          }
+        }, 50)
+      }
+    }
+    
+    touchStartPos.current = null
+    // 延迟重置标志，确保点击事件不会触发
+    setTimeout(() => {
+      hasTriggeredLongPress.current = false
+    }, 100)
   }
 
-  const handleTouchMove = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPos.current) return
+    
+    const touch = e.touches[0]
+    const moveDistance = Math.sqrt(
+      Math.pow(touch.clientX - touchStartPos.current.x, 2) +
+      Math.pow(touch.clientY - touchStartPos.current.y, 2)
+    )
+    
+    // 如果移动距离超过 10px，取消长按
+    if (moveDistance > 10) {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current)
+        longPressTimer.current = null
+      }
+      touchStartPos.current = null
     }
   }
 
@@ -101,7 +168,6 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
         'flex items-center justify-center select-none',
         'transition-all duration-200',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30',
-        'touch-manipulation',
         roundedSize,
         isOpen
           ? [
@@ -141,6 +207,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
         height: `${size}px`,
         minWidth: `${size}px`,
         minHeight: `${size}px`,
+        touchAction: 'none', // 完全控制触摸行为，防止浏览器默认行为
       }}
       whileHover={!isOpen && !gameOver ? { scale: 1.02, y: -1 } : {}}
       whileTap={!isOpen && !gameOver ? { scale: 0.98, y: 0 } : {}}
