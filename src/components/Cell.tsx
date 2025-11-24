@@ -46,8 +46,8 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
 
   // 处理指针按下（支持鼠标和触摸）
   const handlePointerDown = (e: React.PointerEvent) => {
-    // 只处理主指针（鼠标左键或第一个触摸点）
-    if (e.button !== 0 && e.pointerType !== 'touch') return
+    // 只处理鼠标左键或触摸事件，过滤鼠标右键和中键
+    if (e.pointerType === 'mouse' && e.button !== 0) return
     
     // 如果格子已打开或游戏结束，不处理
     if (gameOver || isOpen) return
