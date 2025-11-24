@@ -37,6 +37,9 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
   const touchMoved = useRef(false)
   // 长按插旗保护：标记是否刚完成长按插旗，需要松手后才能再次长按取消
   const longPressGuard = useRef(false)
+  const activeTouchId = useRef<number | null>(null)
+  const touchStartPoint = useRef<{ x: number; y: number } | null>(null)
+  const guardResetTimer = useRef<number | null>(null)
 
   // 根据cellSize动态调整字体和图标大小
   const fontSize = Math.max(12, Math.min(16, cellSize * 0.4))
@@ -52,6 +55,24 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
     }),
     [cellSize, fontSize]
   )
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
+  const resetGuardWithDelay = () => {
+    if (guardResetTimer.current) {
+      clearTimeout(guardResetTimer.current)
+    }
+
+    guardResetTimer.current = window.setTimeout(() => {
+      longPressGuard.current = false
+      guardResetTimer.current = null
+    }, LONG_PRESS_RESET_DELAY)
+  }
 
   const handleClick = () => {
     if (isLongPress.current) {
@@ -82,63 +103,80 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
   }
 
   // 长按支持（移动端插旗）
-  const handleTouchStart = () => {
+  const handleTouchStart = (e: React.TouchEvent) => {
     if (gameOver || isOpen) return
 
     // 长按保护：如果刚完成长按插旗，阻止立即开始新的长按
-    // 用户需要先松手（在touchEnd中重置），再按下才能取消旗子
     if (longPressGuard.current) {
       return
     }
 
+    const touch = e.touches[0]
+    if (!touch) return
+
+    activeTouchId.current = touch.identifier
+    touchStartPoint.current = { x: touch.clientX, y: touch.clientY }
     isLongPress.current = false
     touchMoved.current = false
+
     longPressTimer.current = window.setTimeout(() => {
-      if (!touchMoved.current) {
+      if (!touchMoved.current && !longPressGuard.current) {
         isLongPress.current = true
         onFlag()
         soundEffects.playFlag()
-        // 触觉反馈
         if (navigator.vibrate) {
           navigator.vibrate(50)
         }
-        // 设置保护标志：刚完成长按插旗，需要松手后才能再次长按
         longPressGuard.current = true
+        clearLongPressTimer()
       }
     }, LONG_PRESS_DURATION)
   }
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
+    const isTrackedTouch = Array.from(e.changedTouches).some(
+      touch => touch.identifier === activeTouchId.current
+    )
+
+    if (!isTrackedTouch) {
+      return
     }
+
+    clearLongPressTimer()
+
     // 防止长按后触发点击
     if (isLongPress.current) {
       e.preventDefault()
     }
-    touchMoved.current = false
 
-    // 重置长按保护标志：松手后允许再次长按取消旗子
-    // 延迟重置，确保不会在同一个触摸事件中立即触发新的长按
-    setTimeout(() => {
-      longPressGuard.current = false
-    }, LONG_PRESS_RESET_DELAY)
+    touchMoved.current = false
+    isLongPress.current = false
+    activeTouchId.current = null
+    touchStartPoint.current = null
+
+    // 松手后延迟重置长按保护，确保一个触摸事件只触发一次插旗
+    resetGuardWithDelay()
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (activeTouchId.current === null || !touchStartPoint.current) {
+      return
+    }
+
+    const trackedTouch = Array.from(e.touches).find(
+      touch => touch.identifier === activeTouchId.current
+    )
+    if (!trackedTouch) {
+      return
+    }
+
     // 移动超过20px认为是滚动而非长按
-    const touch = e.touches[0]
-    const startTouch = (e.target as HTMLElement).getBoundingClientRect()
-    const dx = Math.abs(touch.clientX - startTouch.left - startTouch.width / 2)
-    const dy = Math.abs(touch.clientY - startTouch.top - startTouch.height / 2)
+    const dx = Math.abs(trackedTouch.clientX - touchStartPoint.current.x)
+    const dy = Math.abs(trackedTouch.clientY - touchStartPoint.current.y)
 
     if (dx > 20 || dy > 20) {
       touchMoved.current = true
-      if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current)
-        longPressTimer.current = null
-      }
+      clearLongPressTimer()
     }
   }
 
@@ -174,6 +212,7 @@ function CellComponent({ cell, cellSize, onOpen, onFlag, onChord, gameOver, redu
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
+      onTouchCancel={handleTouchEnd}
       whileHover={!reduceMotion && !isOpen && !gameOver ? { scale: 1.05 } : undefined}
       whileTap={!reduceMotion && !isOpen && !gameOver ? { scale: 0.95 } : undefined}
       disabled={gameOver && !isOpen}
