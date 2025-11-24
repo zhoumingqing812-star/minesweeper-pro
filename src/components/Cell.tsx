@@ -33,6 +33,7 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
   const longPressTimer = useRef<number | null>(null)
   const isLongPress = useRef(false)
   const touchStartPos = useRef<{ x: number; y: number } | null>(null)
+  const justFlaggedByLongPress = useRef(false) // 标记是否刚刚通过长按插旗
 
   const handleClick = () => {
     // 如果是长按触发的点击，忽略它
@@ -54,6 +55,11 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
   // 处理右键和长按（移动端长按会触发 contextmenu）
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
+    // 如果刚刚通过长按插旗，忽略这个 contextmenu 事件（防止重复切换）
+    if (justFlaggedByLongPress.current) {
+      justFlaggedByLongPress.current = false
+      return
+    }
     if (gameOver || isOpen) return
     onFlag()
     soundEffects.playFlag()
@@ -70,12 +76,17 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
 
     longPressTimer.current = window.setTimeout(() => {
       isLongPress.current = true
+      justFlaggedByLongPress.current = true // 标记刚刚通过长按插旗
       onFlag()
       soundEffects.playFlag()
       // 触发震动反馈
       if (navigator.vibrate) {
         navigator.vibrate(50)
       }
+      // 延迟重置标志，防止后续的 contextmenu 事件触发
+      setTimeout(() => {
+        justFlaggedByLongPress.current = false
+      }, 300) // 300ms 内忽略 contextmenu 事件
     }, 400) // 400ms 长按判定，更灵敏
   }
 
@@ -93,6 +104,11 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
         clearTimeout(longPressTimer.current)
         longPressTimer.current = null
       }
+      // 如果已经触发了长按，也重置标志（虽然理论上不应该发生）
+      if (isLongPress.current) {
+        isLongPress.current = false
+        justFlaggedByLongPress.current = false
+      }
     }
   }
 
@@ -102,9 +118,22 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
       longPressTimer.current = null
     }
 
-    // 如果触发了长按，阻止默认事件（防止触发点击）
+    // 如果触发了长按，阻止默认事件（防止触发点击和 contextmenu）
     if (isLongPress.current) {
       e.preventDefault()
+      e.stopPropagation()
+      // 阻止后续可能触发的 contextmenu 事件
+      const preventContextMenu = (ev: Event) => {
+        ev.preventDefault()
+        ev.stopPropagation()
+        // 移除监听器，只阻止一次
+        window.removeEventListener('contextmenu', preventContextMenu, true)
+      }
+      // 短暂监听 contextmenu 事件并阻止它
+      window.addEventListener('contextmenu', preventContextMenu, true)
+      setTimeout(() => {
+        window.removeEventListener('contextmenu', preventContextMenu, true)
+      }, 300)
     }
 
     touchStartPos.current = null
