@@ -30,7 +30,17 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
   const { isOpen, isFlagged, isMine, neighborCount } = cell
   const buttonRef = useRef<HTMLButtonElement>(null)
 
+  const longPressTimer = useRef<number | null>(null)
+  const isLongPress = useRef(false)
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null)
+
   const handleClick = () => {
+    // 如果是长按触发的点击，忽略它
+    if (isLongPress.current) {
+      isLongPress.current = false
+      return
+    }
+    
     if (gameOver || isFlagged) return
     if (isOpen && neighborCount > 0) {
       onChord()
@@ -49,12 +59,56 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
     soundEffects.playFlag()
   }
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (gameOver || isOpen) return
+    
+    isLongPress.current = false
+    touchStartPos.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY
+    }
+
+    longPressTimer.current = window.setTimeout(() => {
+      isLongPress.current = true
+      onFlag()
+      soundEffects.playFlag()
+      // 触发震动反馈
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+    }, 500) // 500ms 长按判定
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPos.current) return
+
+    const moveX = e.touches[0].clientX
+    const moveY = e.touches[0].clientY
+    const diffX = Math.abs(moveX - touchStartPos.current.x)
+    const diffY = Math.abs(moveY - touchStartPos.current.y)
+
+    // 如果移动超过 10px，取消长按
+    if (diffX > 10 || diffY > 10) {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current)
+        longPressTimer.current = null
+      }
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    touchStartPos.current = null
+  }
+
   const handleDoubleClick = () => {
     if (gameOver || !isOpen || neighborCount === 0) return
     onChord()
     soundEffects.playClick()
   }
-
 
   // 根据 size 计算字体大小
   const fontSize = size <= 30 ? 'text-xs' : size <= 36 ? 'text-sm' : 'text-base'
@@ -102,6 +156,9 @@ export function Cell({ cell, onOpen, onFlag, onChord, gameOver, size = 36 }: Cel
       )}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       onDoubleClick={handleDoubleClick}
       style={{
         width: `${size}px`,
