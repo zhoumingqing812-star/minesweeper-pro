@@ -233,7 +233,7 @@ function App() {
           animate={{ opacity: 1, y: 0 }}
         >
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-400">
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-200">
               高度（行）
               <input
                 type="number"
@@ -243,10 +243,10 @@ function App() {
                 onChange={(e) => handleRowsChange(e.target.value)}
                 className="rounded-lg border border-gray-600 bg-gray-800/60 px-3 py-2 text-sm text-gray-100 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none"
               />
-              <span className="text-[11px] text-gray-500">{MIN_ROWS}-{MAX_ROWS}</span>
+              <span className="text-[11px] text-gray-300">{MIN_ROWS}-{MAX_ROWS}</span>
             </label>
 
-            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-400">
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-200">
               宽度（列）
               <input
                 type="number"
@@ -256,10 +256,10 @@ function App() {
                 onChange={(e) => handleColsChange(e.target.value)}
                 className="rounded-lg border border-gray-600 bg-gray-800/60 px-3 py-2 text-sm text-gray-100 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none"
               />
-              <span className="text-[11px] text-gray-500">{MIN_COLS}-{MAX_COLS}</span>
+              <span className="text-[11px] text-gray-300">{MIN_COLS}-{MAX_COLS}</span>
             </label>
 
-            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-400">
+            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-gray-200">
               地雷数量
               <input
                 type="number"
@@ -269,15 +269,15 @@ function App() {
                 onChange={(e) => handleMinesChange(e.target.value)}
                 className="rounded-lg border border-gray-600 bg-gray-800/60 px-3 py-2 text-sm text-gray-100 focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none"
               />
-              <span className="text-[11px] text-gray-500">最多 {rowsValue * colsValue - 1}</span>
+              <span className="text-[11px] text-gray-300">最多 {rowsValue * colsValue - 1}</span>
             </label>
           </div>
 
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-gray-200">
               推荐地雷数：{' '}
-              <span className="font-mono text-purple-300">{recommendedMines}</span>
-              <span className="text-gray-500">（约 {Math.round((recommendedMines / (rowsValue * colsValue)) * 100)}% 密度）</span>
+              <span className="font-mono text-purple-300 font-semibold">{recommendedMines}</span>
+              <span className="text-gray-300">（约 {Math.round((recommendedMines / (rowsValue * colsValue)) * 100)}% 密度）</span>
             </div>
 
             <div className="flex gap-2">
@@ -296,7 +296,7 @@ function App() {
             </div>
           </div>
 
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-gray-200">
             当前棋盘：{config.rows} × {config.cols} ，地雷 {config.mines} 枚
           </p>
         </motion.div>
@@ -355,7 +355,7 @@ function App() {
         />
 
         {/* 移动端提示 */}
-        <p className="text-xs text-gray-500 text-center sm:hidden">
+        <p className="text-xs text-gray-300 text-center sm:hidden">
           Long press to flag
         </p>
 

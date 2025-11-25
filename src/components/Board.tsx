@@ -178,7 +178,7 @@ export function Board({
         {/* 纵向滑动条 */}
         {showVerticalSlider && (
           <div className="absolute top-1/2 -translate-y-1/2 right-1 flex flex-col items-center gap-1 bg-gray-900/50 rounded-full px-1 py-2 shadow-inner shadow-black/30">
-            <span className="text-[10px] text-gray-400 tracking-widest">上下</span>
+            <span className="text-[10px] text-gray-200 tracking-widest">上下</span>
             <input
               type="range"
               min={0}
@@ -198,7 +198,7 @@ export function Board({
       {/* 横向滑动条 */}
       {showHorizontalSlider && (
         <div className="mt-3 flex items-center gap-2 px-2">
-          <span className="text-[11px] text-gray-400 tracking-widest">左右</span>
+          <span className="text-[11px] text-gray-200 tracking-widest">左右</span>
           <input
             type="range"
             min={0}
@@ -216,7 +216,7 @@ export function Board({
 
       {/* 操作提示 */}
       {isLargeBoard && (
-        <p className="mt-2 text-xs text-gray-500 text-center">
+        <p className="mt-2 text-xs text-gray-300 text-center">
           Scroll to view the entire board • Long press to flag on mobile
         </p>
       )}
