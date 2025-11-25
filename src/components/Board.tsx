@@ -142,7 +142,7 @@ export function Board({
           // 平滑滚动
           scrollBehavior: 'smooth',
           WebkitOverflowScrolling: 'touch', // iOS 平滑滚动
-          touchAction: 'pan-x pan-y',
+          touchAction: 'pan-x pan-y pinch-zoom', // 允许平移和双指缩放
           overscrollBehavior: 'contain',
         }}
         initial={{ opacity: 0, y: 20 }}
