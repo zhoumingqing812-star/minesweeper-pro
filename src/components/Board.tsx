@@ -43,6 +43,13 @@ export function Board({
     scrollLeft: 0,
     scrollTop: 0,
   })
+  
+  // 双指缩放相关状态
+  const pinchStateRef = useRef<{
+    initialDistance: number
+    initialCellSize: number
+    isPinching: boolean
+  } | null>(null)
 
   // 判断是否是大棋盘（需要滚动）
   const isLargeBoard = cols > 16 || rows > 16
@@ -82,9 +89,68 @@ export function Board({
     setScrollState(prev => ({ ...prev, scrollTop: target }))
   }
 
+  // 计算两点之间的距离
+  const getDistance = (touch1: Touch, touch2: Touch): number => {
+    const dx = touch2.clientX - touch1.clientX
+    const dy = touch2.clientY - touch1.clientY
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
+  // 处理触摸开始事件
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const touch1 = e.touches[0]
+      const touch2 = e.touches[1]
+      const distance = getDistance(touch1, touch2)
+      
+      pinchStateRef.current = {
+        initialDistance: distance,
+        initialCellSize: cellSize,
+        isPinching: true,
+      }
+      
+      // 阻止默认行为（如页面滚动）
+      e.preventDefault()
+    }
+  }, [cellSize])
+
+  // 处理触摸移动事件
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchStateRef.current?.isPinching) {
+      const touch1 = e.touches[0]
+      const touch2 = e.touches[1]
+      const currentDistance = getDistance(touch1, touch2)
+      
+      const { initialDistance, initialCellSize } = pinchStateRef.current
+      const scale = currentDistance / initialDistance
+      
+      // 计算新的单元格大小
+      const newCellSize = Math.round(initialCellSize * scale)
+      
+      // 限制在最小和最大尺寸之间
+      const clampedSize = Math.min(MAX_CELL_SIZE, Math.max(MIN_CELL_SIZE, newCellSize))
+      
+      setCellSize(clampedSize)
+      
+      // 阻止默认行为
+      e.preventDefault()
+    }
+  }, [])
+
+  // 处理触摸结束事件
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    // 如果触摸点少于2个，结束缩放
+    if (e.touches.length < 2 && pinchStateRef.current?.isPinching) {
+      pinchStateRef.current = null
+    }
+  }, [])
+
   // 计算自适应单元格大小
   useEffect(() => {
     const calculateCellSize = () => {
+      // 如果正在双指缩放，不自动调整大小
+      if (pinchStateRef.current?.isPinching) return
+      
       const viewportWidth = window.innerWidth
       const maxBoardWidth = Math.min(viewportWidth * 0.9, 1200) // 最大宽度限制
       const newSize = computeCellSize(cols, maxBoardWidth)
@@ -122,8 +188,9 @@ export function Board({
     }
   }, [updateScrollMetrics])
 
-  const showHorizontalSlider = scrollState.maxScrollLeft > 8
-  const showVerticalSlider = scrollState.maxScrollTop > 8
+  // 隐藏滑动条
+  const showHorizontalSlider = false
+  const showVerticalSlider = false
 
   return (
     <div className="relative">
@@ -141,9 +208,12 @@ export function Board({
           // 平滑滚动
           scrollBehavior: 'smooth',
           WebkitOverflowScrolling: 'touch', // iOS 平滑滚动
-          touchAction: isLargeBoard ? 'pan-x pan-y' : 'manipulation',
+          touchAction: 'pan-x pan-y',
           overscrollBehavior: 'contain',
         }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
@@ -217,7 +287,7 @@ export function Board({
       {/* 操作提示 */}
       {isLargeBoard && (
         <p className="mt-2 text-xs text-gray-300 text-center">
-          Scroll to view the entire board • Long press to flag on mobile
+          Scroll to view the entire board • Long press to flag on mobile • Pinch to zoom
         </p>
       )}
     </div>
